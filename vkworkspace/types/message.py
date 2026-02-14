@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from pydantic import Field
 
@@ -9,7 +9,7 @@ from .chat import Chat
 from .user import Contact
 
 if TYPE_CHECKING:
-    from vkworkspace.utils.keyboard import InlineKeyboardBuilder
+    pass
 
 
 class Part(VKTeamsObject):
@@ -20,11 +20,11 @@ class Part(VKTeamsObject):
 class Message(VKTeamsObject):
     msg_id: str = Field(default="", alias="msgId")
     chat: Chat = Field(default_factory=lambda: Chat(chatId="", type=""))
-    from_user: Optional[Contact] = Field(default=None, alias="from")
-    text: Optional[str] = None
-    timestamp: Optional[int] = None
-    edited_timestamp: Optional[int] = Field(default=None, alias="editedTimestamp")
-    format: Optional[dict[str, Any]] = None
+    from_user: Contact | None = Field(default=None, alias="from")
+    text: str | None = None
+    timestamp: int | None = None
+    edited_timestamp: int | None = Field(default=None, alias="editedTimestamp")
+    format: dict[str, Any] | None = None
     parts: list[Part] = Field(default_factory=list)
 
     async def answer(

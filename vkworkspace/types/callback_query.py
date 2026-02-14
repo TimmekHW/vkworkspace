@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import Field, model_validator
 
@@ -12,9 +12,9 @@ from .user import Contact
 
 class CallbackQuery(VKTeamsObject):
     query_id: str = Field(alias="queryId")
-    chat: Optional[Chat] = None
-    from_user: Optional[Contact] = Field(default=None, alias="from")
-    message: Optional[Message] = None
+    chat: Chat | None = None
+    from_user: Contact | None = Field(default=None, alias="from")
+    message: Message | None = None
     callback_data: str = Field(default="", alias="callbackData")
 
     @model_validator(mode="after")

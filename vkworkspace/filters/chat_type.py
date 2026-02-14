@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .base import BaseFilter
 from ..enums.chat_type import ChatType
+from .base import BaseFilter
 
 
 class ChatTypeFilter(BaseFilter):

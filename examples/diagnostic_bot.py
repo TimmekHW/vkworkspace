@@ -18,12 +18,13 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
 import signal
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -50,7 +51,7 @@ log = logging.getLogger("diagnostic")
 # ── JSONL logger ───────────────────────────────────────────────────────────
 
 def ts() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def write_log(entry: dict[str, Any]) -> None:
@@ -400,7 +401,8 @@ async def handle_command(
 
     elif cmd == "/stats":
         if LOG_FILE.exists():
-            line_count = sum(1 for _ in open(LOG_FILE, encoding="utf-8"))
+            with open(LOG_FILE, encoding="utf-8") as fh:
+                line_count = sum(1 for _ in fh)
             size_kb = LOG_FILE.stat().st_size / 1024
             # Count event types
             type_counts: dict[str, int] = {}
@@ -454,10 +456,8 @@ async def main() -> None:
     # Graceful shutdown on Ctrl+C
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        try:
+        with contextlib.suppress(NotImplementedError):
             loop.add_signal_handler(sig, stop)
-        except NotImplementedError:
-            pass  # Windows
 
     log.info("Diagnostic bot polling... (log → %s)", LOG_FILE)
     log.info("Send /start to the bot to begin testing")

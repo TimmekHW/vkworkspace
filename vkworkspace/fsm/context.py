@@ -24,10 +24,7 @@ class FSMContext:
         self._key = key
 
     async def set_state(self, state: State | str | None = None) -> None:
-        if isinstance(state, State):
-            state_str = state.state
-        else:
-            state_str = state
+        state_str = state.state if isinstance(state, State) else state
         await self._storage.set_state(key=self._key, state=state_str)
 
     async def get_state(self) -> str | None:

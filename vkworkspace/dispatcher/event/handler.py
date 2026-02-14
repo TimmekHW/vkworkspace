@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import inspect
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ class FilterObject:
                 return False
 
         # BaseFilter or async callable
-        if hasattr(cb, "__call__"):
+        if callable(cb):
             if inspect.iscoroutinefunction(cb.__call__) or inspect.iscoroutinefunction(cb):
                 return await cb(event, **kwargs)
             return cb(event, **kwargs)

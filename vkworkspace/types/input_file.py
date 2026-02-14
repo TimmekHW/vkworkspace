@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
-from typing import BinaryIO, Union
+from typing import BinaryIO
 
 
 class InputFile:
     def __init__(
         self,
-        file: Union[str, Path, BinaryIO, bytes],
+        file: str | Path | BinaryIO | bytes,
         filename: str | None = None,
     ) -> None:
         self.file = file

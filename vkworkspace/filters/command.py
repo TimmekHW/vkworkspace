@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Union
+from typing import Any
 
 from .base import BaseFilter
 
@@ -33,7 +33,7 @@ class Command(BaseFilter):
 
     def __init__(
         self,
-        *commands: Union[str, re.Pattern[str]],
+        *commands: str | re.Pattern[str],
         prefix: str | tuple[str, ...] = "/",
         ignore_case: bool = True,
     ) -> None:

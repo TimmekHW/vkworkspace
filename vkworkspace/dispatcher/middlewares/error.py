@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
-from .base import BaseMiddleware
 from ..event.bases import UNHANDLED, CancelHandler, SkipHandler
+from .base import BaseMiddleware
 
 logger = logging.getLogger(__name__)
 

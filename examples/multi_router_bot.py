@@ -9,7 +9,7 @@ Usage:
 import asyncio
 
 from vkworkspace import Bot, Dispatcher, F, Router
-from vkworkspace.filters import Command, ChatTypeFilter
+from vkworkspace.filters import ChatTypeFilter, Command
 from vkworkspace.types import Message
 
 # ── Admin router ──────────────────────────────────────────────────────

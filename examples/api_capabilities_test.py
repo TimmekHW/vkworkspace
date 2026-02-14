@@ -691,7 +691,7 @@ async def main(token: str, api_url: str, chat_id: str) -> None:
             print(f"       Бот: {data.get('firstName', '?')} (@{data.get('nick', '?')})")
         else:
             print(f"       ⚠️  Не удалось получить info о боте (HTTP {code})")
-            print(f"       Проверьте TOKEN и API_URL!")
+            print("       Проверьте TOKEN и API_URL!")
             if code == 0:
                 print(f"       Ошибка: {data.get('_error', '?')}")
                 return

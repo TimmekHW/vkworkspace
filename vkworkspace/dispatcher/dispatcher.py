@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import signal
 from typing import Any
 
-from .event.bases import UNHANDLED
-from .router import Router
 from ..enums.event_type import EventType
 from ..types.base import VKTeamsObject
 from ..types.callback_query import CallbackQuery
 from ..types.event import Update
 from ..types.message import Message
+from .event.bases import UNHANDLED
+from .router import Router
 
 logger = logging.getLogger(__name__)
 
@@ -169,10 +170,8 @@ class Dispatcher(Router):
         try:
             loop = asyncio.get_running_loop()
             for sig in (signal.SIGINT, signal.SIGTERM):
-                try:
+                with contextlib.suppress(NotImplementedError):
                     loop.add_signal_handler(sig, self._stop_signal)
-                except NotImplementedError:
-                    pass  # Windows
 
             if skip_updates:
                 for bot in bots:

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .base import BaseFilter
 from ..fsm.state import State
+from .base import BaseFilter
 
 
 class StateFilter(BaseFilter):

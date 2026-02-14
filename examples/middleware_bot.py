@@ -8,7 +8,8 @@ Usage:
 import asyncio
 import logging
 import time
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from vkworkspace import BaseMiddleware, Bot, Dispatcher, F, Router
 from vkworkspace.filters import Command

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import Field
 
 from .base import VKTeamsObject
@@ -9,24 +7,24 @@ from .base import VKTeamsObject
 
 class Photo(VKTeamsObject):
     url: str
-    width: Optional[int] = None
-    height: Optional[int] = None
+    width: int | None = None
+    height: int | None = None
 
 
 class User(VKTeamsObject):
     user_id: str = Field(alias="userId")
-    first_name: Optional[str] = Field(default=None, alias="firstName")
-    last_name: Optional[str] = Field(default=None, alias="lastName")
-    nick: Optional[str] = None
-    about: Optional[str] = None
-    is_bot: Optional[bool] = Field(default=None, alias="isBot")
+    first_name: str | None = Field(default=None, alias="firstName")
+    last_name: str | None = Field(default=None, alias="lastName")
+    nick: str | None = None
+    about: str | None = None
+    is_bot: bool | None = Field(default=None, alias="isBot")
 
 
 class Contact(VKTeamsObject):
     user_id: str = Field(alias="userId")
-    first_name: Optional[str] = Field(default=None, alias="firstName")
-    last_name: Optional[str] = Field(default=None, alias="lastName")
-    nick: Optional[str] = None
+    first_name: str | None = Field(default=None, alias="firstName")
+    last_name: str | None = Field(default=None, alias="lastName")
+    nick: str | None = None
 
 
 class ChatMember(User):
@@ -36,8 +34,8 @@ class ChatMember(User):
 
 class BotInfo(VKTeamsObject):
     user_id: str = Field(alias="userId")
-    nick: Optional[str] = None
-    first_name: Optional[str] = Field(default=None, alias="firstName")
-    last_name: Optional[str] = Field(default=None, alias="lastName")
-    about: Optional[str] = None
+    nick: str | None = None
+    first_name: str | None = Field(default=None, alias="firstName")
+    last_name: str | None = Field(default=None, alias="lastName")
+    about: str | None = None
     photo: list[Photo] = Field(default_factory=list)

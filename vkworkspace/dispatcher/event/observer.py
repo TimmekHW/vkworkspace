@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
+from ..middlewares.manager import MiddlewareManager
 from .bases import UNHANDLED, CancelHandler, SkipHandler
 from .handler import FilterObject, HandlerObject
-from ..middlewares.manager import MiddlewareManager
 
 logger = logging.getLogger(__name__)
 

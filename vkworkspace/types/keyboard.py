@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import Field
 
 from .base import VKTeamsObject
@@ -9,6 +7,6 @@ from .base import VKTeamsObject
 
 class Button(VKTeamsObject):
     text: str
-    url: Optional[str] = None
-    callback_data: Optional[str] = Field(default=None, alias="callbackData")
-    style: Optional[str] = None
+    url: str | None = None
+    callback_data: str | None = Field(default=None, alias="callbackData")
+    style: str | None = None

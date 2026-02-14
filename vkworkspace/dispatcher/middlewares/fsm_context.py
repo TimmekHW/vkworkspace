@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
-from .base import BaseMiddleware
 from ...fsm.context import FSMContext
 from ...fsm.storage.base import BaseStorage, StorageKey
 from ...fsm.strategy import FSMStrategy
+from .base import BaseMiddleware
 
 
 class FSMContextMiddleware(BaseMiddleware):
