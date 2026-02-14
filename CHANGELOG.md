@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2025-02-14
+
+### Fixed
+- Fixed relative links in READMEs breaking on PyPI (now absolute GitHub URLs)
+- Fixed tests workflow failing when no tests exist (exit code 5)
+
 ## [1.0.0] - 2025-02-14
 
 ### Changed
@@ -31,5 +37,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Inline keyboard builder utility
 - 10 example bots (echo, keyboard, FSM, middleware, proxy, diagnostic, API tester, etc.)
 
+[1.0.1]: https://github.com/TimmekHW/vkworkspace/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/TimmekHW/vkworkspace/compare/v0.1.0...v1.0.0
 [0.1.0]: https://github.com/TimmekHW/vkworkspace/releases/tag/v0.1.0
