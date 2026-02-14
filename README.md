@@ -5,7 +5,7 @@
 A modern replacement for the official [mail-ru-im/bot-python](https://github.com/mail-ru-im/bot-python) (`mailru-im-bot`) library.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/TimmekHW/vkworkspace/blob/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/vkworkspace.svg)](https://pypi.org/project/vkworkspace/)
 
 > **[README на русском языке](https://github.com/TimmekHW/vkworkspace/blob/main/README_RU.md)**
@@ -493,14 +493,14 @@ async def simple(message: Message) -> None:
 
 | Example | Description |
 |---------|-------------|
-| [echo_bot.py](examples/echo_bot.py) | Basic commands + text echo |
-| [keyboard_bot.py](examples/keyboard_bot.py) | Inline keyboards + callback handling |
-| [fsm_bot.py](examples/fsm_bot.py) | Multi-step dialog with FSM |
-| [middleware_bot.py](examples/middleware_bot.py) | Custom middleware (logging, access control) |
-| [proxy_bot.py](examples/proxy_bot.py) | Corporate proxy + rate limiter |
-| [error_handling_bot.py](examples/error_handling_bot.py) | Error handlers, lifecycle hooks, edited message routing |
-| [custom_prefix_bot.py](examples/custom_prefix_bot.py) | Custom command prefixes, regex commands, argument parsing |
-| [multi_router_bot.py](examples/multi_router_bot.py) | Modular sub-routers, chat events (join/leave/pin) |
+| [echo_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/echo_bot.py) | Basic commands + text echo |
+| [keyboard_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/keyboard_bot.py) | Inline keyboards + callback handling |
+| [fsm_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/fsm_bot.py) | Multi-step dialog with FSM |
+| [middleware_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/middleware_bot.py) | Custom middleware (logging, access control) |
+| [proxy_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/proxy_bot.py) | Corporate proxy + rate limiter |
+| [error_handling_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/error_handling_bot.py) | Error handlers, lifecycle hooks, edited message routing |
+| [custom_prefix_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/custom_prefix_bot.py) | Custom command prefixes, regex commands, argument parsing |
+| [multi_router_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/multi_router_bot.py) | Modular sub-routers, chat events (join/leave/pin) |
 
 ## Project Structure
 
@@ -524,7 +524,7 @@ vkworkspace/
 
 ## License
 
-MIT [LICENSE](LICENSE).
+MIT [LICENSE](https://github.com/TimmekHW/vkworkspace/blob/main/LICENSE).
 
 ---
 

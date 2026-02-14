@@ -5,10 +5,10 @@
 Современная замена официальной библиотеке [mail-ru-im/bot-python](https://github.com/mail-ru-im/bot-python) (`mailru-im-bot`).
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/TimmekHW/vkworkspace/blob/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/vkworkspace.svg)](https://pypi.org/project/vkworkspace/)
 
-> **[README in English](README.md)**
+> **[README in English](https://github.com/TimmekHW/vkworkspace/blob/main/README.md)**
 
 ## vkworkspace vs mailru-im-bot
 
@@ -501,14 +501,14 @@ async def simple(message: Message) -> None:
 
 | Пример | Описание |
 |--------|----------|
-| [echo_bot.py](examples/echo_bot.py) | Базовые команды + эхо-бот |
-| [keyboard_bot.py](examples/keyboard_bot.py) | Inline-клавиатуры + обработка callback |
-| [fsm_bot.py](examples/fsm_bot.py) | Многошаговый диалог с FSM |
-| [middleware_bot.py](examples/middleware_bot.py) | Middleware (логирование, контроль доступа) |
-| [proxy_bot.py](examples/proxy_bot.py) | Корпоративный прокси + rate limiter |
-| [error_handling_bot.py](examples/error_handling_bot.py) | Обработка ошибок, хуки жизненного цикла, роутинг правок |
-| [custom_prefix_bot.py](examples/custom_prefix_bot.py) | Кастомные префиксы команд, regex, парсинг аргументов |
-| [multi_router_bot.py](examples/multi_router_bot.py) | Модульные подроутеры, события чата (вход/выход/закреп) |
+| [echo_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/echo_bot.py) | Базовые команды + эхо-бот |
+| [keyboard_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/keyboard_bot.py) | Inline-клавиатуры + обработка callback |
+| [fsm_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/fsm_bot.py) | Многошаговый диалог с FSM |
+| [middleware_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/middleware_bot.py) | Middleware (логирование, контроль доступа) |
+| [proxy_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/proxy_bot.py) | Корпоративный прокси + rate limiter |
+| [error_handling_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/error_handling_bot.py) | Обработка ошибок, хуки жизненного цикла, роутинг правок |
+| [custom_prefix_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/custom_prefix_bot.py) | Кастомные префиксы команд, regex, парсинг аргументов |
+| [multi_router_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/multi_router_bot.py) | Модульные подроутеры, события чата (вход/выход/закреп) |
 
 ## Структура проекта
 
@@ -532,7 +532,7 @@ vkworkspace/
 
 ## Лицензия
 
-MIT [LICENSE](LICENSE).
+MIT [LICENSE](https://github.com/TimmekHW/vkworkspace/blob/main/LICENSE).
 
 ---
 
