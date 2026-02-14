@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vkworkspace"
-version = "0.1.0"
+version = "1.0.0"
 description = "Fully async framework for building VK Teams (VK Workspace) bots, inspired by aiogram 3"
 readme = "README.md"
 license = { text = "MIT" }
@@ -18,7 +18,7 @@ keywords = [
     "aiogram", "httpx", "pydantic", "mailru-im-bot", "myteam",
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.11",
