@@ -1,0 +1,28 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+.env
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+*.so
+.idea/
+.vscode/
+*.swp
+*.swo
+# Benchmark results (generated, may contain corporate URLs)
+results*.txt
+results*.json
+bench_report*.txt
+# Diagnostic logs
+*.jsonl
