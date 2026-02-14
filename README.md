@@ -8,7 +8,7 @@ A modern replacement for the official [mail-ru-im/bot-python](https://github.com
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/vkworkspace.svg)](https://pypi.org/project/vkworkspace/)
 
-> **[README на русском языке](README_RU.md)**
+> **[README на русском языке](https://github.com/TimmekHW/vkworkspace/blob/main/README_RU.md)**
 
 ## vkworkspace vs mailru-im-bot
 
