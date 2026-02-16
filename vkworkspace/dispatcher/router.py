@@ -84,20 +84,37 @@ class Router:
         if observer is None:
             return UNHANDLED
 
-        result = await observer.propagate(event, **kwargs)
-        if result is not UNHANDLED:
-            return result
+        sub_routers = self._sub_routers
 
-        for sub_router in self._sub_routers:
-            result = await sub_router.propagate_event(
-                update_type=update_type,
-                event=event,
-                **kwargs,
-            )
+        async def _inner(ev: Any, data: dict[str, Any]) -> Any:
+            result = await observer.trigger(ev, **data)
             if result is not UNHANDLED:
                 return result
+            for sub_router in sub_routers:
+                result = await sub_router.propagate_event(
+                    update_type=update_type,
+                    event=ev,
+                    **data,
+                )
+                if result is not UNHANDLED:
+                    return result
+            return UNHANDLED
 
-        return UNHANDLED
+        wrapped: Any = _inner
+        for mw in reversed(observer.middleware.middlewares):
+
+            def _make_wrapper(
+                middleware: Any,
+                prev: Any,
+            ) -> Any:
+                async def _call(ev: Any, data: dict[str, Any]) -> Any:
+                    return await middleware(prev, ev, data)
+
+                return _call
+
+            wrapped = _make_wrapper(mw, wrapped)
+
+        return await wrapped(event, kwargs)
 
     def on_startup(
         self, callback: Callable[..., Any] | None = None
