@@ -134,9 +134,9 @@ class Bot:
         url = f"{self.api_url}/{endpoint}"
 
         if files:
-            resp = await session.post(url, params=params, files=files)
+            resp = await session.post(url, data=params, files=files)
         else:
-            resp = await session.get(url, params=params)
+            resp = await session.post(url, data=params)
 
         resp.raise_for_status()
         data: dict[str, Any] = resp.json()
@@ -218,6 +218,8 @@ class Bot:
 
     # ── Messages ──────────────────────────────────────────────────────
 
+    TEXT_LENGTH_WARNING = 4096
+
     async def send_text(
         self,
         chat_id: str,
@@ -230,6 +232,13 @@ class Bot:
         format_: dict[str, Any] | Any | None = None,
     ) -> APIResponse:
         """Send text message. ``messages/sendText``"""
+        if len(text) > self.TEXT_LENGTH_WARNING:
+            logger.warning(
+                "Text length %d exceeds %d chars — "
+                "may cause UI lag or be rejected by the server",
+                len(text),
+                self.TEXT_LENGTH_WARNING,
+            )
         data = await self._request(
             "messages/sendText",
             self._params(
@@ -255,6 +264,13 @@ class Bot:
         format_: dict[str, Any] | Any | None = None,
     ) -> APIResponse:
         """Edit message text. ``messages/editText``"""
+        if len(text) > self.TEXT_LENGTH_WARNING:
+            logger.warning(
+                "Text length %d exceeds %d chars — "
+                "may cause UI lag or be rejected by the server",
+                len(text),
+                self.TEXT_LENGTH_WARNING,
+            )
         data = await self._request(
             "messages/editText",
             self._params(
@@ -477,6 +493,17 @@ class Bot:
                 members=[{"sn": m} for m in members],
             ),
         )
+        return APIResponse.model_validate(data)
+
+    async def set_chat_avatar(
+        self,
+        chat_id: str,
+        file: InputFile | BinaryIO,
+    ) -> APIResponse:
+        """Set chat avatar. ``chats/avatar/set``"""
+        params = self._params(chatId=chat_id)
+        files_dict = self._file_payload(file)
+        data = await self._request("chats/avatar/set", params, files_dict)
         return APIResponse.model_validate(data)
 
     async def send_actions(self, chat_id: str, actions: str) -> APIResponse:

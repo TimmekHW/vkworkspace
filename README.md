@@ -68,6 +68,7 @@ VK Teams bots spend 99% of their time waiting for the network. Synchronous frame
 - **Custom command prefixes** — `Command("start", prefix=("/", "!", ""))` for any prefix style
 - **FSM** — Finite State Machine with Memory and Redis storage backends
 - **Middleware** — inner/outer middleware pipeline for logging, auth, throttling
+- **Text formatting** — `md`, `html` helpers for MarkdownV2/HTML + `split_text` for long messages
 - **Keyboard builder** — fluent API for inline keyboards with button styles
 - **Rate limiter** — built-in request throttling (`rate_limit=5` = max 5 req/sec)
 - **Proxy support** — route API requests through corporate proxy
@@ -318,6 +319,52 @@ async def admin_only(message: Message) -> None:
     await message.answer("Admin panel")
 ```
 
+## Text Formatting
+
+VK Teams supports MarkdownV2 and HTML formatting. Use the `md` and `html` helpers to build formatted messages safely:
+
+```python
+from vkworkspace.utils.text import md, html, split_text
+
+# ── MarkdownV2 ──
+text = f"{md.bold('Status')}: {md.escape(user_input)}"
+await message.answer(text, parse_mode="MarkdownV2")
+
+md.bold("text")            # *text*
+md.italic("text")          # _text_
+md.underline("text")       # __text__
+md.strikethrough("text")   # ~text~
+md.code("x = 1")           # `x = 1`
+md.pre("code", "python")   # ```python\ncode\n```
+md.link("Click", "https://example.com")  # [Click](https://example.com)
+md.quote("quoted text")    # >quoted text
+md.escape("price: $100")   # Escapes special chars
+
+# ── HTML ──
+text = f"{html.bold('Status')}: {html.escape(user_input)}"
+await message.answer(text, parse_mode="HTML")
+
+html.bold("text")           # <b>text</b>
+html.italic("text")         # <i>text</i>
+html.underline("text")      # <u>text</u>
+html.strikethrough("text")  # <s>text</s>
+html.code("x = 1")          # <code>x = 1</code>
+html.pre("code", "python")  # <pre><code class="python">code</code></pre>
+html.link("Click", "https://example.com")  # <a href="...">Click</a>
+html.quote("quoted text")   # <blockquote>quoted text</blockquote>
+html.ordered_list(["a", "b"])    # <ol><li>a</li><li>b</li></ol>
+html.unordered_list(["a", "b"]) # <ul><li>a</li><li>b</li></ul>
+
+# ── Split long text ──
+# VK Teams may lag on messages > 4096 chars; split_text breaks them up
+for chunk in split_text(long_text):
+    await message.answer(chunk)
+
+# Custom limit
+for chunk in split_text(long_text, max_length=2000):
+    await message.answer(chunk)
+```
+
 ## Inline Keyboards
 
 ```python
@@ -452,6 +499,7 @@ await bot.get_pending_users(chat_id)
 await bot.set_chat_title(chat_id, "New Title")
 await bot.set_chat_about(chat_id, "Description")
 await bot.set_chat_rules(chat_id, "Rules")
+await bot.set_chat_avatar(chat_id, file=InputFile("avatar.png"))
 await bot.block_user(chat_id, user_id, del_last_messages=True)
 await bot.unblock_user(chat_id, user_id)
 await bot.resolve_pending(chat_id, approve=True, user_id=uid)
@@ -501,6 +549,7 @@ async def simple(message: Message) -> None:
 | [error_handling_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/error_handling_bot.py) | Error handlers, lifecycle hooks, edited message routing |
 | [custom_prefix_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/custom_prefix_bot.py) | Custom command prefixes, regex commands, argument parsing |
 | [multi_router_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/multi_router_bot.py) | Modular sub-routers, chat events (join/leave/pin) |
+| [formatting_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/formatting_bot.py) | MarkdownV2/HTML formatting + split_text for long messages |
 
 ## Project Structure
 
@@ -512,7 +561,7 @@ vkworkspace/
 ├── dispatcher/      # Dispatcher, Router, EventObserver, Middleware pipeline
 ├── filters/         # Command, StateFilter, CallbackData, ChatType, Regexp
 ├── fsm/             # StatesGroup, State, FSMContext, Memory/Redis storage
-└── utils/           # InlineKeyboardBuilder, magic filter (F)
+└── utils/           # InlineKeyboardBuilder, magic filter (F), text formatting (md, html, split_text)
 ```
 
 ## Requirements
