@@ -593,6 +593,27 @@ async def simple(message: Message) -> None:
     await message.answer(message.text)
 ```
 
+## Mini-Apps + Bots
+
+VK Teams mini-apps (WebView apps inside the client) **cannot send notifications or messages** to users. The official recommendation is to use a bot as the notification channel.
+
+Typical pattern:
+
+1. Bot sends a message with a **mini-app link** (with parameters for deep-linking)
+2. Mini-app opens, identifies the user via `GetSelfId` / `GetAuth` (JS Bridge)
+3. Mini-app communicates with its own backend (can be the same server as the bot)
+4. For notifications back to the user — the **bot sends messages** via the Bot API
+
+```python
+# Bot sends a deep-link to a mini-app
+miniapp_url = "https://u.myteam.mail.ru/miniapp/my-app-id?order=42"
+await message.answer(
+    f"Open your order: {miniapp_url}",
+)
+```
+
+> Mini-apps are registered via **Metabot** (`/newapp`) — the same bot used for bot management (`/newbot`).
+
 ## Examples
 
 | Example | Description |
