@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [1.2.0] - Unreleased
+## [1.2.0] - 2026-02-16
 
 ### Added
 - Text formatting string helpers: `md` (MarkdownV2) and `html` with `escape`, `bold`, `italic`, `underline`, `strikethrough`, `code`, `pre`, `link`, `quote`, `mention` methods
