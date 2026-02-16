@@ -8,13 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [1.2.0] - Unreleased
 
 ### Added
-- Text formatting utilities: `md` (MarkdownV2) and `html` helpers with `escape`, `bold`, `italic`, `underline`, `strikethrough`, `code`, `pre`, `link`, `quote` methods
+- Text formatting string helpers: `md` (MarkdownV2) and `html` with `escape`, `bold`, `italic`, `underline`, `strikethrough`, `code`, `pre`, `link`, `quote`, `mention` methods
+- Text builder (aiogram-style composable nodes): `Text`, `Bold`, `Italic`, `Underline`, `Strikethrough`, `Code`, `Pre`, `Link`, `Mention`, `Quote`, `Raw` with auto-escaping and `as_kwargs()` for automatic `parse_mode`
 - `html.ordered_list()` and `html.unordered_list()` for HTML list formatting
 - `split_text()` utility to split long messages into chunks (default 4096 chars), splitting on newlines/spaces
+- `Bot(parse_mode=...)` — default parse mode applied to all `send_text`, `edit_text`, `send_file` calls (aiogram-style). Use `parse_mode=None` per-call to override
 - `Bot.set_chat_avatar()` method (`chats/avatar/set`)
 - Warning log when `send_text` / `edit_text` receive text longer than 4096 chars
-- Example: `formatting_bot.py` — demonstrates MarkdownV2, HTML, and split_text
-- Documentation for text formatting in both README.md and README_RU.md
+- Example: `formatting_bot.py` — demonstrates string helpers, text builder, and split_text
+
+### Changed
+- `Message.answer()` now accepts `**kwargs` and forwards them to `Bot.send_text()` — automatically supports new parameters without signature changes
 
 ### Fixed
 - Fixed `Bot._request()` to use POST with `data=` instead of GET with `params=` — fixes multipart form data (file uploads) and aligns with VK Teams API spec

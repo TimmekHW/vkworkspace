@@ -27,21 +27,11 @@ class Message(VKTeamsObject):
     format: dict[str, Any] | None = None
     parts: list[Part] = Field(default_factory=list)
 
-    async def answer(
-        self,
-        text: str,
-        reply_msg_id: str | None = None,
-        inline_keyboard_markup: Any = None,
-        parse_mode: str | None = None,
-        format_: dict[str, Any] | None = None,
-    ) -> Any:
+    async def answer(self, text: str, **kwargs: Any) -> Any:
         return await self.bot.send_text(
             chat_id=self.chat.chat_id,
             text=text,
-            reply_msg_id=reply_msg_id,
-            inline_keyboard_markup=inline_keyboard_markup,
-            parse_mode=parse_mode,
-            format_=format_,
+            **kwargs,
         )
 
     async def reply(self, text: str, **kwargs: Any) -> Any:

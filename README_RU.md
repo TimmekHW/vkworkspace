@@ -134,6 +134,7 @@ bot = Bot(
     poll_time=60,               # Таймаут long-poll (секунды)
     rate_limit=5.0,             # Макс 5 запросов/сек (None = без ограничений)
     proxy="http://proxy:8080",  # HTTP-прокси для корпоративных сетей
+    parse_mode="HTML",          # Режим парсинга по умолчанию (None = обычный текст)
 )
 ```
 
@@ -156,6 +157,29 @@ bot = Bot(
     api_url="https://api.internal.corp/bot/v1",
     proxy="http://corp-proxy.internal:3128",
 )
+```
+
+### Режим парсинга по умолчанию
+
+Укажите `parse_mode` при создании бота — он автоматически применится ко всем вызовам `send_text`, `edit_text` и `send_file`. Не нужно передавать его каждый раз (как в aiogram):
+
+```python
+from vkworkspace.enums import ParseMode
+
+bot = Bot(
+    token="TOKEN",
+    api_url="https://myteam.mail.ru/bot/v1",
+    parse_mode=ParseMode.HTML,  # или "MarkdownV2"
+)
+
+# parse_mode="HTML" отправляется автоматически
+await message.answer(f"{html.bold('Привет')}, мир!")
+
+# Переопределить для одного вызова
+await message.answer("*жирный*", parse_mode="MarkdownV2")
+
+# Отключить для одного вызова
+await message.answer("обычный текст", parse_mode=None)
 ```
 
 ## Диспетчер
@@ -337,6 +361,7 @@ md.code("x = 1")            # `x = 1`
 md.pre("код", "python")     # ```python\nкод\n```
 md.link("Ссылка", "https://example.com")  # [Ссылка](https://example.com)
 md.quote("цитата")          # >цитата
+md.mention("user@company.ru")  # @\[user@company\.ru\]
 md.escape("цена: $100")     # Экранирует спецсимволы
 
 # ── HTML ──
@@ -351,6 +376,7 @@ html.code("x = 1")           # <code>x = 1</code>
 html.pre("код", "python")    # <pre><code class="python">код</code></pre>
 html.link("Ссылка", "https://example.com")  # <a href="...">Ссылка</a>
 html.quote("цитата")         # <blockquote>цитата</blockquote>
+html.mention("user@company.ru")  # @[user@company.ru]
 html.ordered_list(["а", "б"])    # <ol><li>а</li><li>б</li></ol>
 html.unordered_list(["а", "б"]) # <ul><li>а</li><li>б</li></ul>
 
@@ -363,6 +389,36 @@ for chunk in split_text(long_text):
 for chunk in split_text(long_text, max_length=2000):
     await message.answer(chunk)
 ```
+
+### Text Builder (как в aiogram)
+
+Компонуемые ноды форматирования с автоэкранированием и автоматическим `parse_mode`. Не нужно думать о режиме — `as_kwargs()` сам всё решает:
+
+```python
+from vkworkspace.utils.text import Text, Bold, Italic, Code, Link, Pre, Quote, Mention
+
+# Собираем текст из нод — строки экранируются автоматически
+content = Text(
+    Bold("Заказ #42"), "\n",
+    "Статус: ", Italic("в обработке"), "\n",
+    "Итого: ", Code("$99.99"),
+)
+await message.answer(**content.as_kwargs())  # text + parse_mode="HTML" автоматически
+
+# Вложенность работает
+content = Bold(Italic("жирный курсив"))         # <b><i>жирный курсив</i></b>
+
+# Операторы для цепочек
+content = "Привет, " + Bold("Мир") + "!"        # нода Text
+await message.answer(**content.as_kwargs())
+
+# Отрендерить как MarkdownV2
+await message.answer(**content.as_kwargs("MarkdownV2"))
+```
+
+Доступные ноды: `Text`, `Bold`, `Italic`, `Underline`, `Strikethrough`, `Code`, `Pre`, `Link`, `Mention`, `Quote`, `Raw`
+
+> **Внимание:** Не смешивайте строковые хелперы (`md.*` / `html.*`) с нодами — строки внутри нод автоэкранируются, поэтому `Text(md.bold("x"))` выдаст литеральный `*x*`, а не жирный. Используйте `Bold("x")`.
 
 ## Inline-клавиатуры
 

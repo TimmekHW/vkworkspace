@@ -135,6 +135,7 @@ bot = Bot(
     poll_time=60,               # Long-poll timeout (seconds)
     rate_limit=5.0,             # Max 5 requests/sec (None = unlimited)
     proxy="http://proxy:8080",  # HTTP proxy for corporate networks
+    parse_mode="HTML",          # Default parse mode for all messages (None = plain text)
 )
 ```
 
@@ -157,6 +158,29 @@ bot = Bot(
     api_url="https://api.internal.corp/bot/v1",
     proxy="http://corp-proxy.internal:3128",
 )
+```
+
+### Default Parse Mode
+
+Set `parse_mode` on the Bot to apply it automatically to all `send_text`, `edit_text`, and `send_file` calls — no need to pass it every time (aiogram-style):
+
+```python
+from vkworkspace.enums import ParseMode
+
+bot = Bot(
+    token="TOKEN",
+    api_url="https://myteam.mail.ru/bot/v1",
+    parse_mode=ParseMode.HTML,  # or "MarkdownV2"
+)
+
+# parse_mode="HTML" is sent automatically
+await message.answer(f"{html.bold('Hello')}, world!")
+
+# Override for a single call
+await message.answer("*bold*", parse_mode="MarkdownV2")
+
+# Disable for a single call
+await message.answer("plain text", parse_mode=None)
 ```
 
 ## Dispatcher
@@ -338,6 +362,7 @@ md.code("x = 1")           # `x = 1`
 md.pre("code", "python")   # ```python\ncode\n```
 md.link("Click", "https://example.com")  # [Click](https://example.com)
 md.quote("quoted text")    # >quoted text
+md.mention("user@company.ru")  # @\[user@company\.ru\]
 md.escape("price: $100")   # Escapes special chars
 
 # ── HTML ──
@@ -352,6 +377,7 @@ html.code("x = 1")          # <code>x = 1</code>
 html.pre("code", "python")  # <pre><code class="python">code</code></pre>
 html.link("Click", "https://example.com")  # <a href="...">Click</a>
 html.quote("quoted text")   # <blockquote>quoted text</blockquote>
+html.mention("user@company.ru")  # @[user@company.ru]
 html.ordered_list(["a", "b"])    # <ol><li>a</li><li>b</li></ol>
 html.unordered_list(["a", "b"]) # <ul><li>a</li><li>b</li></ul>
 
@@ -364,6 +390,36 @@ for chunk in split_text(long_text):
 for chunk in split_text(long_text, max_length=2000):
     await message.answer(chunk)
 ```
+
+### Text Builder (aiogram-style)
+
+Composable formatting nodes with auto-escaping and automatic `parse_mode`. No need to think about which parse mode to use — `as_kwargs()` handles it:
+
+```python
+from vkworkspace.utils.text import Text, Bold, Italic, Code, Link, Pre, Quote, Mention
+
+# Compose text from nodes — strings are auto-escaped
+content = Text(
+    Bold("Order #42"), "\n",
+    "Status: ", Italic("processing"), "\n",
+    "Total: ", Code("$99.99"),
+)
+await message.answer(**content.as_kwargs())  # text + parse_mode="HTML" auto
+
+# Nesting works
+content = Bold(Italic("bold italic"))           # <b><i>bold italic</i></b>
+
+# Operator chaining
+content = "Hello, " + Bold("World") + "!"      # Text node
+await message.answer(**content.as_kwargs())
+
+# Render as MarkdownV2 instead
+await message.answer(**content.as_kwargs("MarkdownV2"))
+```
+
+Available nodes: `Text`, `Bold`, `Italic`, `Underline`, `Strikethrough`, `Code`, `Pre`, `Link`, `Mention`, `Quote`, `Raw`
+
+> **Warning:** Do not mix string helpers (`md.*` / `html.*`) with node builder — raw strings inside nodes get auto-escaped, so `Text(md.bold("x"))` produces literal `*x*`, not bold. Use `Bold("x")` instead.
 
 ## Inline Keyboards
 
