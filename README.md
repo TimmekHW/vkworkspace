@@ -68,6 +68,7 @@ VK Teams bots spend 99% of their time waiting for the network. Synchronous frame
 - **Custom command prefixes** — `Command("start", prefix=("/", "!", ""))` for any prefix style
 - **FSM** — Finite State Machine with Memory and Redis storage backends
 - **Middleware** — inner/outer middleware pipeline for logging, auth, throttling
+- **Text formatting** — `md`, `html` helpers for MarkdownV2/HTML + `split_text` for long messages
 - **Keyboard builder** — fluent API for inline keyboards with button styles
 - **Rate limiter** — built-in request throttling (`rate_limit=5` = max 5 req/sec)
 - **Proxy support** — route API requests through corporate proxy
@@ -134,6 +135,7 @@ bot = Bot(
     poll_time=60,               # Long-poll timeout (seconds)
     rate_limit=5.0,             # Max 5 requests/sec (None = unlimited)
     proxy="http://proxy:8080",  # HTTP proxy for corporate networks
+    parse_mode="HTML",          # Default parse mode for all messages (None = plain text)
 )
 ```
 
@@ -156,6 +158,29 @@ bot = Bot(
     api_url="https://api.internal.corp/bot/v1",
     proxy="http://corp-proxy.internal:3128",
 )
+```
+
+### Default Parse Mode
+
+Set `parse_mode` on the Bot to apply it automatically to all `send_text`, `edit_text`, and `send_file` calls — no need to pass it every time (aiogram-style):
+
+```python
+from vkworkspace.enums import ParseMode
+
+bot = Bot(
+    token="TOKEN",
+    api_url="https://myteam.mail.ru/bot/v1",
+    parse_mode=ParseMode.HTML,  # or "MarkdownV2"
+)
+
+# parse_mode="HTML" is sent automatically
+await message.answer(f"{html.bold('Hello')}, world!")
+
+# Override for a single call
+await message.answer("*bold*", parse_mode="MarkdownV2")
+
+# Disable for a single call
+await message.answer("plain text", parse_mode=None)
 ```
 
 ## Dispatcher
@@ -318,6 +343,84 @@ async def admin_only(message: Message) -> None:
     await message.answer("Admin panel")
 ```
 
+## Text Formatting
+
+VK Teams supports MarkdownV2 and HTML formatting. Use the `md` and `html` helpers to build formatted messages safely:
+
+```python
+from vkworkspace.utils.text import md, html, split_text
+
+# ── MarkdownV2 ──
+text = f"{md.bold('Status')}: {md.escape(user_input)}"
+await message.answer(text, parse_mode="MarkdownV2")
+
+md.bold("text")            # *text*
+md.italic("text")          # _text_
+md.underline("text")       # __text__
+md.strikethrough("text")   # ~text~
+md.code("x = 1")           # `x = 1`
+md.pre("code", "python")   # ```python\ncode\n```
+md.link("Click", "https://example.com")  # [Click](https://example.com)
+md.quote("quoted text")    # >quoted text
+md.mention("user@company.ru")  # @\[user@company\.ru\]
+md.escape("price: $100")   # Escapes special chars
+
+# ── HTML ──
+text = f"{html.bold('Status')}: {html.escape(user_input)}"
+await message.answer(text, parse_mode="HTML")
+
+html.bold("text")           # <b>text</b>
+html.italic("text")         # <i>text</i>
+html.underline("text")      # <u>text</u>
+html.strikethrough("text")  # <s>text</s>
+html.code("x = 1")          # <code>x = 1</code>
+html.pre("code", "python")  # <pre><code class="python">code</code></pre>
+html.link("Click", "https://example.com")  # <a href="...">Click</a>
+html.quote("quoted text")   # <blockquote>quoted text</blockquote>
+html.mention("user@company.ru")  # @[user@company.ru]
+html.ordered_list(["a", "b"])    # <ol><li>a</li><li>b</li></ol>
+html.unordered_list(["a", "b"]) # <ul><li>a</li><li>b</li></ul>
+
+# ── Split long text ──
+# VK Teams may lag on messages > 4096 chars; split_text breaks them up
+for chunk in split_text(long_text):
+    await message.answer(chunk)
+
+# Custom limit
+for chunk in split_text(long_text, max_length=2000):
+    await message.answer(chunk)
+```
+
+### Text Builder (aiogram-style)
+
+Composable formatting nodes with auto-escaping and automatic `parse_mode`. No need to think about which parse mode to use — `as_kwargs()` handles it:
+
+```python
+from vkworkspace.utils.text import Text, Bold, Italic, Code, Link, Pre, Quote, Mention
+
+# Compose text from nodes — strings are auto-escaped
+content = Text(
+    Bold("Order #42"), "\n",
+    "Status: ", Italic("processing"), "\n",
+    "Total: ", Code("$99.99"),
+)
+await message.answer(**content.as_kwargs())  # text + parse_mode="HTML" auto
+
+# Nesting works
+content = Bold(Italic("bold italic"))           # <b><i>bold italic</i></b>
+
+# Operator chaining
+content = "Hello, " + Bold("World") + "!"      # Text node
+await message.answer(**content.as_kwargs())
+
+# Render as MarkdownV2 instead
+await message.answer(**content.as_kwargs("MarkdownV2"))
+```
+
+Available nodes: `Text`, `Bold`, `Italic`, `Underline`, `Strikethrough`, `Code`, `Pre`, `Link`, `Mention`, `Quote`, `Raw`
+
+> **Warning:** Do not mix string helpers (`md.*` / `html.*`) with node builder — raw strings inside nodes get auto-escaped, so `Text(md.bold("x"))` produces literal `*x*`, not bold. Use `Bold("x")` instead.
+
 ## Inline Keyboards
 
 ```python
@@ -452,6 +555,7 @@ await bot.get_pending_users(chat_id)
 await bot.set_chat_title(chat_id, "New Title")
 await bot.set_chat_about(chat_id, "Description")
 await bot.set_chat_rules(chat_id, "Rules")
+await bot.set_chat_avatar(chat_id, file=InputFile("avatar.png"))
 await bot.block_user(chat_id, user_id, del_last_messages=True)
 await bot.unblock_user(chat_id, user_id)
 await bot.resolve_pending(chat_id, approve=True, user_id=uid)
@@ -501,6 +605,7 @@ async def simple(message: Message) -> None:
 | [error_handling_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/error_handling_bot.py) | Error handlers, lifecycle hooks, edited message routing |
 | [custom_prefix_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/custom_prefix_bot.py) | Custom command prefixes, regex commands, argument parsing |
 | [multi_router_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/multi_router_bot.py) | Modular sub-routers, chat events (join/leave/pin) |
+| [formatting_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/formatting_bot.py) | MarkdownV2/HTML formatting + split_text for long messages |
 
 ## Project Structure
 
@@ -512,7 +617,7 @@ vkworkspace/
 ├── dispatcher/      # Dispatcher, Router, EventObserver, Middleware pipeline
 ├── filters/         # Command, StateFilter, CallbackData, ChatType, Regexp
 ├── fsm/             # StatesGroup, State, FSMContext, Memory/Redis storage
-└── utils/           # InlineKeyboardBuilder, magic filter (F)
+└── utils/           # InlineKeyboardBuilder, magic filter (F), text formatting (md, html, split_text)
 ```
 
 ## Requirements

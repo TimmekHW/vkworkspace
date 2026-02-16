@@ -1,0 +1,168 @@
+"""
+Text formatting bot — demonstrates three formatting approaches:
+
+1. String helpers (md.*, html.*) — quick inline formatting
+2. Text builder (Bold, Italic, ...) — composable nodes with auto parse_mode
+3. Raw markdown — write **bold** directly with bot's default parse_mode
+
+Commands:
+    /md       — MarkdownV2 with string helpers
+    /html     — HTML with string helpers
+    /builder  — Text builder (aiogram-style nodes)
+    /long     — split_text for long messages
+    /escape   — safe escaping of user input
+
+Usage:
+    python examples/formatting_bot.py
+"""
+
+import asyncio
+
+from vkworkspace import Bot, Dispatcher, F, Router
+from vkworkspace.enums import ParseMode
+from vkworkspace.filters import Command
+from vkworkspace.types import Message
+from vkworkspace.utils.text import (
+    Bold,
+    Code,
+    Italic,
+    Link,
+    Mention,
+    Pre,
+    Text,
+    Underline,
+    html,
+    md,
+    split_text,
+)
+
+router = Router()
+
+
+@router.message(Command("start"))
+async def cmd_start(message: Message) -> None:
+    content = Text(
+        Bold("Text formatting demo bot"), "\n\n",
+        "/md — MarkdownV2 (string helpers)\n",
+        "/html — HTML (string helpers)\n",
+        "/builder — Text builder (aiogram-style)\n",
+        "/long — split_text for long messages\n",
+        "/escape — safe escaping of user input",
+    )
+    await message.answer(**content.as_kwargs())
+
+
+@router.message(Command("md"))
+async def cmd_markdown(message: Message) -> None:
+    text = "\n".join([
+        md.bold("Bold text"),
+        md.italic("Italic text"),
+        md.underline("Underlined"),
+        md.strikethrough("Strikethrough"),
+        md.code("inline code"),
+        md.pre("x = 42\nprint(x)", "python"),
+        md.link("Example link", "https://example.com"),
+        md.mention("user@company.ru"),
+        md.quote("This is a quote"),
+    ])
+    # Override bot default: this message uses MarkdownV2 instead of HTML
+    await message.answer(text, parse_mode="MarkdownV2")
+
+
+@router.message(Command("html"))
+async def cmd_html(message: Message) -> None:
+    text = "\n".join([
+        html.bold("Bold text"),
+        html.italic("Italic text"),
+        html.underline("Underlined"),
+        html.strikethrough("Strikethrough"),
+        html.code("inline code"),
+        html.pre("x = 42\nprint(x)", "python"),
+        html.link("Example link", "https://example.com"),
+        html.mention("user@company.ru"),
+        html.quote("This is a quote"),
+        "",
+        html.unordered_list(["Item A", "Item B", "Item C"]),
+    ])
+    # parse_mode="HTML" is inherited from Bot — no need to pass it
+    await message.answer(text)
+
+
+@router.message(Command("builder"))
+async def cmd_builder(message: Message) -> None:
+    # Text builder: composable nodes with auto-escaping and auto parse_mode
+    content = Text(
+        Bold("Text Builder Demo"), "\n\n",
+        "This is ", Bold("bold"), ", ",
+        Italic("italic"), ", ",
+        Underline("underlined"), ", and ",
+        Bold(Italic("bold italic")), ".\n\n",
+        "Inline: ", Code("x = 42"), "\n",
+        Pre("def hello():\n    print('world')", language="python"), "\n",
+        Link("Example link", url="https://example.com"), "\n",
+        Mention("user@company.ru"),
+    )
+    # as_kwargs() returns {"text": "...", "parse_mode": "HTML"} — no need to choose mode
+    await message.answer(**content.as_kwargs())
+
+    # Operator chaining also works
+    chain = "Price: " + Bold("$99") + " — " + Italic("limited offer!")
+    await message.answer(**chain.as_kwargs())
+
+    # Render as MarkdownV2 instead
+    simple = Text("Same content, ", Bold("different mode"))
+    await message.answer(**simple.as_kwargs("MarkdownV2"))
+
+
+@router.message(Command("long"))
+async def cmd_long(message: Message) -> None:
+    # Generate a long message (~6000 chars)
+    long_text = "\n".join(
+        f"Line {i}: {'A' * 50}" for i in range(1, 101)
+    )
+    chunks = split_text(long_text)
+    # parse_mode=None disables formatting for this plain-text message
+    await message.answer(
+        f"Splitting {len(long_text)} chars into {len(chunks)} chunks...",
+        parse_mode=None,
+    )
+    for i, chunk in enumerate(chunks, 1):
+        await message.answer(f"[{i}/{len(chunks)}]\n{chunk}")
+
+
+@router.message(Command("escape"))
+async def cmd_escape(message: Message) -> None:
+    raw = "Price: $100 & <script>alert('xss')</script> *bold*"
+
+    md_safe = md.escape(raw)
+    html_safe = html.escape(raw)
+
+    await message.answer(
+        f"Raw input:\n{raw}\n\n"
+        f"md.escape():\n{md_safe}\n\n"
+        f"html.escape():\n{html_safe}"
+    )
+
+
+@router.message(F.text)
+async def echo_formatted(message: Message) -> None:
+    # Text builder auto-escapes user input — no manual html.escape() needed
+    content = Bold("You said") + ": " + Text(message.text)
+    await message.answer(**content.as_kwargs())
+
+
+async def main() -> None:
+    bot = Bot(
+        token="YOUR_BOT_TOKEN",
+        api_url="https://myteam.mail.ru/bot/v1",
+        parse_mode=ParseMode.HTML,  # All messages use HTML by default
+    )
+    dp = Dispatcher()
+    dp.include_router(router)
+
+    print("Formatting bot is running...")
+    await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

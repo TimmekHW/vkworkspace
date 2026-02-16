@@ -68,6 +68,7 @@ Framework overhead — **НОЛЬ** в реальных условиях. Сет
 - **Кастомные префиксы команд** — `Command("start", prefix=("/", "!", ""))` для любого стиля
 - **FSM** — конечный автомат состояний с бэкендами Memory и Redis
 - **Middleware** — пайплайн inner/outer для логирования, авторизации, троттлинга
+- **Форматирование текста** — хелперы `md`, `html` для MarkdownV2/HTML + `split_text` для длинных сообщений
 - **Конструктор клавиатур** — fluent API для inline-клавиатур со стилями кнопок
 - **Rate limiter** — встроенный ограничитель запросов (`rate_limit=5` = макс. 5 запросов/сек)
 - **Прокси** — маршрутизация API-запросов через корпоративный прокси
@@ -133,6 +134,7 @@ bot = Bot(
     poll_time=60,               # Таймаут long-poll (секунды)
     rate_limit=5.0,             # Макс 5 запросов/сек (None = без ограничений)
     proxy="http://proxy:8080",  # HTTP-прокси для корпоративных сетей
+    parse_mode="HTML",          # Режим парсинга по умолчанию (None = обычный текст)
 )
 ```
 
@@ -155,6 +157,29 @@ bot = Bot(
     api_url="https://api.internal.corp/bot/v1",
     proxy="http://corp-proxy.internal:3128",
 )
+```
+
+### Режим парсинга по умолчанию
+
+Укажите `parse_mode` при создании бота — он автоматически применится ко всем вызовам `send_text`, `edit_text` и `send_file`. Не нужно передавать его каждый раз (как в aiogram):
+
+```python
+from vkworkspace.enums import ParseMode
+
+bot = Bot(
+    token="TOKEN",
+    api_url="https://myteam.mail.ru/bot/v1",
+    parse_mode=ParseMode.HTML,  # или "MarkdownV2"
+)
+
+# parse_mode="HTML" отправляется автоматически
+await message.answer(f"{html.bold('Привет')}, мир!")
+
+# Переопределить для одного вызова
+await message.answer("*жирный*", parse_mode="MarkdownV2")
+
+# Отключить для одного вызова
+await message.answer("обычный текст", parse_mode=None)
 ```
 
 ## Диспетчер
@@ -317,6 +342,84 @@ async def admin_only(message: Message) -> None:
     await message.answer("Панель администратора")
 ```
 
+## Форматирование текста
+
+VK Teams поддерживает форматирование в MarkdownV2 и HTML. Используйте хелперы `md` и `html` для безопасного формирования сообщений:
+
+```python
+from vkworkspace.utils.text import md, html, split_text
+
+# ── MarkdownV2 ──
+text = f"{md.bold('Статус')}: {md.escape(user_input)}"
+await message.answer(text, parse_mode="MarkdownV2")
+
+md.bold("текст")            # *текст*
+md.italic("текст")          # _текст_
+md.underline("текст")       # __текст__
+md.strikethrough("текст")   # ~текст~
+md.code("x = 1")            # `x = 1`
+md.pre("код", "python")     # ```python\nкод\n```
+md.link("Ссылка", "https://example.com")  # [Ссылка](https://example.com)
+md.quote("цитата")          # >цитата
+md.mention("user@company.ru")  # @\[user@company\.ru\]
+md.escape("цена: $100")     # Экранирует спецсимволы
+
+# ── HTML ──
+text = f"{html.bold('Статус')}: {html.escape(user_input)}"
+await message.answer(text, parse_mode="HTML")
+
+html.bold("текст")           # <b>текст</b>
+html.italic("текст")         # <i>текст</i>
+html.underline("текст")      # <u>текст</u>
+html.strikethrough("текст")  # <s>текст</s>
+html.code("x = 1")           # <code>x = 1</code>
+html.pre("код", "python")    # <pre><code class="python">код</code></pre>
+html.link("Ссылка", "https://example.com")  # <a href="...">Ссылка</a>
+html.quote("цитата")         # <blockquote>цитата</blockquote>
+html.mention("user@company.ru")  # @[user@company.ru]
+html.ordered_list(["а", "б"])    # <ol><li>а</li><li>б</li></ol>
+html.unordered_list(["а", "б"]) # <ul><li>а</li><li>б</li></ul>
+
+# ── Разбиение длинного текста ──
+# VK Teams может лагать на сообщениях > 4096 символов; split_text разбивает их
+for chunk in split_text(long_text):
+    await message.answer(chunk)
+
+# Кастомный лимит
+for chunk in split_text(long_text, max_length=2000):
+    await message.answer(chunk)
+```
+
+### Text Builder (как в aiogram)
+
+Компонуемые ноды форматирования с автоэкранированием и автоматическим `parse_mode`. Не нужно думать о режиме — `as_kwargs()` сам всё решает:
+
+```python
+from vkworkspace.utils.text import Text, Bold, Italic, Code, Link, Pre, Quote, Mention
+
+# Собираем текст из нод — строки экранируются автоматически
+content = Text(
+    Bold("Заказ #42"), "\n",
+    "Статус: ", Italic("в обработке"), "\n",
+    "Итого: ", Code("$99.99"),
+)
+await message.answer(**content.as_kwargs())  # text + parse_mode="HTML" автоматически
+
+# Вложенность работает
+content = Bold(Italic("жирный курсив"))         # <b><i>жирный курсив</i></b>
+
+# Операторы для цепочек
+content = "Привет, " + Bold("Мир") + "!"        # нода Text
+await message.answer(**content.as_kwargs())
+
+# Отрендерить как MarkdownV2
+await message.answer(**content.as_kwargs("MarkdownV2"))
+```
+
+Доступные ноды: `Text`, `Bold`, `Italic`, `Underline`, `Strikethrough`, `Code`, `Pre`, `Link`, `Mention`, `Quote`, `Raw`
+
+> **Внимание:** Не смешивайте строковые хелперы (`md.*` / `html.*`) с нодами — строки внутри нод автоэкранируются, поэтому `Text(md.bold("x"))` выдаст литеральный `*x*`, а не жирный. Используйте `Bold("x")`.
+
 ## Inline-клавиатуры
 
 ```python
@@ -460,6 +563,7 @@ await bot.get_pending_users(chat_id)
 await bot.set_chat_title(chat_id, "Новое название")
 await bot.set_chat_about(chat_id, "Описание")
 await bot.set_chat_rules(chat_id, "Правила")
+await bot.set_chat_avatar(chat_id, file=InputFile("avatar.png"))
 await bot.block_user(chat_id, user_id, del_last_messages=True)
 await bot.unblock_user(chat_id, user_id)
 await bot.resolve_pending(chat_id, approve=True, user_id=uid)
@@ -509,6 +613,7 @@ async def simple(message: Message) -> None:
 | [error_handling_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/error_handling_bot.py) | Обработка ошибок, хуки жизненного цикла, роутинг правок |
 | [custom_prefix_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/custom_prefix_bot.py) | Кастомные префиксы команд, regex, парсинг аргументов |
 | [multi_router_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/multi_router_bot.py) | Модульные подроутеры, события чата (вход/выход/закреп) |
+| [formatting_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/formatting_bot.py) | Форматирование MarkdownV2/HTML + split_text для длинных сообщений |
 
 ## Структура проекта
 
@@ -520,7 +625,7 @@ vkworkspace/
 ├── dispatcher/      # Dispatcher, Router, EventObserver, Middleware pipeline
 ├── filters/         # Command, StateFilter, CallbackData, ChatType, Regexp
 ├── fsm/             # StatesGroup, State, FSMContext, Memory/Redis хранилища
-└── utils/           # InlineKeyboardBuilder, магический фильтр (F)
+└── utils/           # InlineKeyboardBuilder, магический фильтр (F), форматирование текста (md, html, split_text)
 ```
 
 ## Требования

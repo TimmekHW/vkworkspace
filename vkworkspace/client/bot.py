@@ -19,6 +19,8 @@ from vkworkspace.types.user import BotInfo, ChatMember, User
 
 logger = logging.getLogger(__name__)
 
+_UNSET: Any = object()  # sentinel: "caller didn't pass parse_mode"
+
 
 class RateLimiter:
     """
@@ -77,6 +79,7 @@ class Bot:
         poll_time: int = 60,
         rate_limit: float | None = None,
         proxy: str | None = None,
+        parse_mode: str | None = None,
     ) -> None:
         self.token = token
         self.api_url = api_url.rstrip("/")
@@ -84,6 +87,7 @@ class Bot:
         self.poll_time = poll_time
         self.rate_limit = rate_limit
         self.proxy = proxy
+        self.parse_mode = parse_mode
         self._rate_limiter: RateLimiter | None = (
             RateLimiter(rate_limit) if rate_limit else None
         )
@@ -134,9 +138,9 @@ class Bot:
         url = f"{self.api_url}/{endpoint}"
 
         if files:
-            resp = await session.post(url, params=params, files=files)
+            resp = await session.post(url, data=params, files=files)
         else:
-            resp = await session.get(url, params=params)
+            resp = await session.post(url, data=params)
 
         resp.raise_for_status()
         data: dict[str, Any] = resp.json()
@@ -148,6 +152,12 @@ class Bot:
             )
 
         return data
+
+    def _resolve_parse_mode(self, parse_mode: Any) -> str | None:
+        """Return explicit value or fall back to ``self.parse_mode``."""
+        if parse_mode is _UNSET:
+            return self.parse_mode
+        return parse_mode
 
     @staticmethod
     def _keyboard_json(keyboard: Any) -> str | None:
@@ -218,6 +228,8 @@ class Bot:
 
     # ── Messages ──────────────────────────────────────────────────────
 
+    TEXT_LENGTH_WARNING = 4096
+
     async def send_text(
         self,
         chat_id: str,
@@ -226,10 +238,17 @@ class Bot:
         forward_chat_id: str | None = None,
         forward_msg_id: str | None = None,
         inline_keyboard_markup: Any = None,
-        parse_mode: str | None = None,
+        parse_mode: Any = _UNSET,
         format_: dict[str, Any] | Any | None = None,
     ) -> APIResponse:
         """Send text message. ``messages/sendText``"""
+        if len(text) > self.TEXT_LENGTH_WARNING:
+            logger.warning(
+                "Text length %d exceeds %d chars — "
+                "may cause UI lag or be rejected by the server",
+                len(text),
+                self.TEXT_LENGTH_WARNING,
+            )
         data = await self._request(
             "messages/sendText",
             self._params(
@@ -239,7 +258,7 @@ class Bot:
                 forwardChatId=forward_chat_id,
                 forwardMsgId=forward_msg_id,
                 inlineKeyboardMarkup=self._keyboard_json(inline_keyboard_markup),
-                parseMode=parse_mode,
+                parseMode=self._resolve_parse_mode(parse_mode),
                 format=self._format_json(format_),
             ),
         )
@@ -251,10 +270,17 @@ class Bot:
         msg_id: str,
         text: str,
         inline_keyboard_markup: Any = None,
-        parse_mode: str | None = None,
+        parse_mode: Any = _UNSET,
         format_: dict[str, Any] | Any | None = None,
     ) -> APIResponse:
         """Edit message text. ``messages/editText``"""
+        if len(text) > self.TEXT_LENGTH_WARNING:
+            logger.warning(
+                "Text length %d exceeds %d chars — "
+                "may cause UI lag or be rejected by the server",
+                len(text),
+                self.TEXT_LENGTH_WARNING,
+            )
         data = await self._request(
             "messages/editText",
             self._params(
@@ -262,7 +288,7 @@ class Bot:
                 msgId=msg_id,
                 text=text,
                 inlineKeyboardMarkup=self._keyboard_json(inline_keyboard_markup),
-                parseMode=parse_mode,
+                parseMode=self._resolve_parse_mode(parse_mode),
                 format=self._format_json(format_),
             ),
         )
@@ -290,7 +316,7 @@ class Bot:
         forward_chat_id: str | None = None,
         forward_msg_id: str | None = None,
         inline_keyboard_markup: Any = None,
-        parse_mode: str | None = None,
+        parse_mode: Any = _UNSET,
         format_: dict[str, Any] | Any | None = None,
     ) -> APIResponse:
         """Send file. ``messages/sendFile``"""
@@ -302,7 +328,7 @@ class Bot:
             forwardChatId=forward_chat_id,
             forwardMsgId=forward_msg_id,
             inlineKeyboardMarkup=self._keyboard_json(inline_keyboard_markup),
-            parseMode=parse_mode,
+            parseMode=self._resolve_parse_mode(parse_mode),
             format=self._format_json(format_),
         )
         files_dict = self._file_payload(file)
@@ -477,6 +503,17 @@ class Bot:
                 members=[{"sn": m} for m in members],
             ),
         )
+        return APIResponse.model_validate(data)
+
+    async def set_chat_avatar(
+        self,
+        chat_id: str,
+        file: InputFile | BinaryIO,
+    ) -> APIResponse:
+        """Set chat avatar. ``chats/avatar/set``"""
+        params = self._params(chatId=chat_id)
+        files_dict = self._file_payload(file)
+        data = await self._request("chats/avatar/set", params, files_dict)
         return APIResponse.model_validate(data)
 
     async def send_actions(self, chat_id: str, actions: str) -> APIResponse:
