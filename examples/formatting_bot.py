@@ -166,6 +166,7 @@ async def cmd_escape(message: Message) -> None:
 @router.message(F.text)
 async def echo_formatted(message: Message) -> None:
     # Text builder auto-escapes user input — no manual html.escape() needed
+    assert message.text is not None  # guaranteed by F.text filter
     content = Bold("You said") + ": " + Text(message.text)
     await message.answer(**content.as_kwargs())
 

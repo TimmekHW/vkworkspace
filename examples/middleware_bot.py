@@ -61,6 +61,7 @@ async def cmd_start(message: Message) -> None:
 
 @router.message(F.text)
 async def echo(message: Message) -> None:
+    assert message.text is not None  # guaranteed by F.text filter
     await message.answer(message.text)
 
 

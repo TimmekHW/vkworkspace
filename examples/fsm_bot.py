@@ -50,6 +50,7 @@ async def process_name(message: Message, state: FSMContext) -> None:
 
 @router.message(StateFilter(RegistrationForm.waiting_age), F.text)
 async def process_age(message: Message, state: FSMContext) -> None:
+    assert message.text is not None  # guaranteed by F.text filter
     if not message.text.isdigit():
         await message.answer("Please enter a valid number.")
         return

@@ -7,6 +7,7 @@ Usage:
 """
 
 import asyncio
+from typing import Any
 
 from vkworkspace import Bot, Dispatcher, F, Router
 from vkworkspace.filters import (
@@ -16,24 +17,33 @@ from vkworkspace.filters import (
     RegexpPartsFilter,
     ReplyFilter,
 )
+from vkworkspace.filters.base import BaseFilter
 from vkworkspace.types import Message
+
+# ── Admin filter ─────────────────────────────────────────────────────
+
+ADMIN_IDS = ["admin@company.ru"]
+
+
+class AdminFilter(BaseFilter):
+    """Only allow messages from admins."""
+
+    async def __call__(self, event: Any, **kwargs: Any) -> bool:
+        from_user = getattr(event, "from_user", None)
+        return from_user is not None and from_user.user_id in ADMIN_IDS
+
 
 # ── Admin router ──────────────────────────────────────────────────────
 
 admin_router = Router(name="admin")
 
-ADMIN_IDS = ["admin@company.ru"]
 
-
-@admin_router.message(Command("kick"))
-async def cmd_kick(message: Message, bot: Bot) -> None:
-    if message.from_user.user_id not in ADMIN_IDS:
-        await message.answer("Admins only.")
-        return
+@admin_router.message(AdminFilter(), Command("kick"))
+async def cmd_kick(message: Message) -> None:
     await message.answer("User kicked (demo)")
 
 
-@admin_router.message(Command("stats"))
+@admin_router.message(AdminFilter(), Command("stats"))
 async def cmd_stats(message: Message) -> None:
     await message.answer("Users: 42\nMessages today: 1337")
 
