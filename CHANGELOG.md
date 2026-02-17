@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.4.1] - 2026-02-17
 
 ### Fixed
 - ReDoS mitigation: regex filters now limit input text to 8192 chars (`RegexpFilter`, `RegexpPartsFilter`)
@@ -125,6 +125,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Inline keyboard builder utility
 - 10 example bots (echo, keyboard, FSM, middleware, proxy, diagnostic, API tester, etc.)
 
+[1.4.1]: https://github.com/TimmekHW/vkworkspace/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.2.2...v1.3.0
 [1.2.2]: https://github.com/TimmekHW/vkworkspace/compare/v1.2.1...v1.2.2
