@@ -179,6 +179,8 @@ class Dispatcher(Router):
 
             tasks = [asyncio.create_task(self._polling(bot)) for bot in bots]
             await asyncio.gather(*tasks)
+        except asyncio.CancelledError:
+            logger.info("Polling cancelled")
         finally:
             self._running = False
             await self.emit_shutdown()

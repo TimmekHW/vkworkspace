@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.2] - 2026-02-17
+
+### Fixed
+- Graceful shutdown on Windows — handle `asyncio.CancelledError` in polling loop to avoid traceback on Ctrl+C
+
 ## [1.2.1] - 2026-02-17
 
 ### Improved
@@ -67,6 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Inline keyboard builder utility
 - 10 example bots (echo, keyboard, FSM, middleware, proxy, diagnostic, API tester, etc.)
 
+[1.2.2]: https://github.com/TimmekHW/vkworkspace/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/TimmekHW/vkworkspace/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.0.1...v1.1.0
