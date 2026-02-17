@@ -5,6 +5,8 @@ from typing import Any
 
 from .base import BaseFilter
 
+_MAX_REGEX_TEXT = 8192  # guard against ReDoS on very long input
+
 
 class RegexpFilter(BaseFilter):
     """
@@ -27,7 +29,7 @@ class RegexpFilter(BaseFilter):
         if not text:
             return False
 
-        match = self.pattern.search(text)
+        match = self.pattern.search(text[:_MAX_REGEX_TEXT])
         if match:
             return {"regexp_match": match}
         return False

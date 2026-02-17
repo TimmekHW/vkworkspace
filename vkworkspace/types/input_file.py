@@ -16,7 +16,9 @@ class InputFile:
 
     def read(self) -> tuple[str | None, BinaryIO | bytes]:
         if isinstance(self.file, (str, Path)):
-            path = Path(self.file)
+            path = Path(self.file).resolve()
+            if not path.is_file():
+                raise FileNotFoundError(f"File not found: {path}")
             return self.filename or path.name, open(path, "rb")
         if isinstance(self.file, bytes):
             return self.filename, BytesIO(self.file)

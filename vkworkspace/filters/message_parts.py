@@ -5,6 +5,8 @@ from typing import Any
 
 from .base import BaseFilter
 
+_MAX_REGEX_TEXT = 8192  # guard against ReDoS on very long input
+
 
 class ReplyFilter(BaseFilter):
     """Match messages that are replies to another message.
@@ -69,7 +71,7 @@ class RegexpPartsFilter(BaseFilter):
             message = payload.get("message", {})
             text = message.get("text") if isinstance(message, dict) else None
             if text:
-                match = self.pattern.search(text)
+                match = self.pattern.search(text[:_MAX_REGEX_TEXT])
                 if match:
                     return {"regexp_parts_match": match}
         return False
