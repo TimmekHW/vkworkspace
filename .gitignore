@@ -27,3 +27,4 @@ bench_report*.txt
 # Diagnostic logs
 *.jsonl
 .claude/
+docs/*

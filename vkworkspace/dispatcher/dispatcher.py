@@ -7,8 +7,12 @@ import signal
 from typing import Any
 
 from ..enums.event_type import EventType
-from ..types.base import VKTeamsObject
 from ..types.callback_query import CallbackQuery
+from ..types.chat_member_event import (
+    ChangedChatInfoEvent,
+    LeftChatMembersEvent,
+    NewChatMembersEvent,
+)
 from ..types.event import Update
 from ..types.message import Message
 from .event.bases import UNHANDLED
@@ -92,10 +96,20 @@ class Dispatcher(Router):
                 cb.message.set_bot(bot)
             return update_type, cb, extra
 
-        if update_type in ("new_chat_members", "left_chat_members", "changed_chat_info"):
-            obj = VKTeamsObject.model_validate(payload)
-            obj.set_bot(bot)
-            return update_type, obj, extra
+        if update_type == "new_chat_members":
+            new_members = NewChatMembersEvent.model_validate(payload)
+            new_members.set_bot(bot)
+            return update_type, new_members, extra
+
+        if update_type == "left_chat_members":
+            left_members = LeftChatMembersEvent.model_validate(payload)
+            left_members.set_bot(bot)
+            return update_type, left_members, extra
+
+        if update_type == "changed_chat_info":
+            chat_info = ChangedChatInfoEvent.model_validate(payload)
+            chat_info.set_bot(bot)
+            return update_type, chat_info, extra
 
         return None, None, {}
 

@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-02-17
+
+### Added
+- Thread support: `parent_topic` parameter in `send_text()`, `send_file()`, `send_voice()` for sending messages inside threads
+- `Message.answer_thread()` — create a thread under a message or reply in existing thread
+- `Message.answer()` auto-propagates `parent_topic` when replying inside threads
+- `Message.is_thread_message` property
+- `ParentMessage` model for thread parent references
+- `Bot.send_text_with_deeplink()` — send text with deeplink for mini-app / bot-start scenarios
+- `Bot.add_chat_members()` — add members to chat (`chats/members/add`)
+- `reply_msg_id` and `forward_msg_id` now accept `list[str]` for multi-reply/forward
+- `request_id` parameter (idempotency key) in `send_text()`, `send_file()`, `send_voice()`
+- Typed message parts: `MentionPayload`, `ReplyPayload`, `ForwardPayload`, `FilePayload` with `Part.as_mention`, `as_reply`, `as_forward`, `as_file` accessors
+- Convenience properties on `Message`: `mentions`, `reply_to`, `forwards`, `files`
+- `FormatSpan` and `MessageFormat` — typed model for `format` field (offset/length text formatting)
+- Typed chat member events: `NewChatMembersEvent`, `LeftChatMembersEvent`, `ChangedChatInfoEvent` (replacing generic `VKTeamsObject`)
+- `ChatInfo.phone` and `ChatInfo.photos` fields
+- 93 unit tests (`tests/test_bot_api.py`) covering all Bot API methods
+- Live API test suite (`tests/test_bot_live.py`) for end-to-end verification
+- mypy type checker added to CI (Lint workflow: ruff + mypy)
+- Testing section in README with usage instructions
+
+### Fixed
+- Resolved all 15 mypy type errors across the codebase (strict type safety)
+
 ## [1.2.2] - 2026-02-17
 
 ### Fixed
@@ -72,6 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Inline keyboard builder utility
 - 10 example bots (echo, keyboard, FSM, middleware, proxy, diagnostic, API tester, etc.)
 
+[1.3.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.2.2...v1.3.0
 [1.2.2]: https://github.com/TimmekHW/vkworkspace/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/TimmekHW/vkworkspace/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.1.0...v1.2.0

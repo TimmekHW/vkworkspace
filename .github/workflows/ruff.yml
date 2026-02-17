@@ -1,9 +1,9 @@
-name: Ruff
+name: Lint
 
 on: [push]
 
 jobs:
-  lint:
+  ruff:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -16,5 +16,19 @@ jobs:
         python -m pip install --upgrade pip
         pip install ruff
     - name: Check code with ruff
+      run: ruff check .
+
+  mypy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+    - name: Install dependencies
       run: |
-        ruff check .
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    - name: Check types with mypy
+      run: mypy vkworkspace/ --ignore-missing-imports

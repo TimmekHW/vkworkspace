@@ -14,6 +14,7 @@ from vkworkspace.types.chat import ChatInfo
 from vkworkspace.types.event import Update
 from vkworkspace.types.file import File
 from vkworkspace.types.input_file import InputFile
+from vkworkspace.types.message import ParentMessage
 from vkworkspace.types.response import APIResponse
 from vkworkspace.types.thread import Thread, ThreadSubscribers
 from vkworkspace.types.user import BotInfo, ChatMember, User
@@ -158,7 +159,7 @@ class Bot:
         """Return explicit value or fall back to ``self.parse_mode``."""
         if parse_mode is _UNSET:
             return self.parse_mode
-        return parse_mode
+        return str(parse_mode) if parse_mode is not None else None
 
     @staticmethod
     def _keyboard_json(keyboard: Any) -> str | None:
@@ -169,7 +170,25 @@ class Bot:
         if isinstance(keyboard, list):
             return json.dumps(keyboard, ensure_ascii=False)
         if hasattr(keyboard, "as_json"):
-            return keyboard.as_json()
+            result: str = keyboard.as_json()
+            return result
+        return None
+
+    @staticmethod
+    def _parent_topic_json(parent_topic: ParentMessage | dict[str, Any] | None) -> str | None:
+        if parent_topic is None:
+            return None
+        if isinstance(parent_topic, ParentMessage):
+            return json.dumps(
+                {
+                    "chatId": parent_topic.chat_id,
+                    "messageId": parent_topic.message_id,
+                    "type": parent_topic.type,
+                },
+                ensure_ascii=False,
+            )
+        if isinstance(parent_topic, dict):
+            return json.dumps(parent_topic, ensure_ascii=False)
         return None
 
     @staticmethod
@@ -181,8 +200,22 @@ class Bot:
         if isinstance(format_, dict):
             return json.dumps(format_, ensure_ascii=False)
         if hasattr(format_, "to_json"):
-            return format_.to_json()
+            result: str = format_.to_json()
+            return result
         return None
+
+    @staticmethod
+    def _msg_ids(value: str | list[str] | None) -> str | None:
+        """Normalize message ID(s) to a comma-separated string.
+
+        The API expects ``replyMsgId`` / ``forwardMsgId`` as a plain
+        string (single ID) or comma-separated IDs — **not** a JSON array.
+        """
+        if value is None:
+            return None
+        if isinstance(value, list):
+            return ",".join(value)
+        return value
 
     def _file_payload(
         self,
@@ -235,14 +268,22 @@ class Bot:
         self,
         chat_id: str,
         text: str,
-        reply_msg_id: str | None = None,
+        reply_msg_id: str | list[str] | None = None,
         forward_chat_id: str | None = None,
-        forward_msg_id: str | None = None,
+        forward_msg_id: str | list[str] | None = None,
         inline_keyboard_markup: Any = None,
         parse_mode: ParseMode | str | None = _UNSET,
         format_: dict[str, Any] | Any | None = None,
+        parent_topic: ParentMessage | dict[str, Any] | None = None,
+        request_id: str | None = None,
     ) -> APIResponse:
-        """Send text message. ``messages/sendText``"""
+        """Send text message. ``messages/sendText``
+
+        Pass *parent_topic* to send the message inside a thread.
+        *reply_msg_id* and *forward_msg_id* accept a single ID or a list.
+        *request_id* — idempotency key; the server will not create a
+        duplicate message if the same *request_id* is sent again.
+        """
         if len(text) > self.TEXT_LENGTH_WARNING:
             logger.warning(
                 "Text length %d exceeds %d chars — "
@@ -255,9 +296,38 @@ class Bot:
             self._params(
                 chatId=chat_id,
                 text=text,
-                replyMsgId=reply_msg_id,
+                replyMsgId=self._msg_ids(reply_msg_id),
                 forwardChatId=forward_chat_id,
-                forwardMsgId=forward_msg_id,
+                forwardMsgId=self._msg_ids(forward_msg_id),
+                inlineKeyboardMarkup=self._keyboard_json(inline_keyboard_markup),
+                parseMode=self._resolve_parse_mode(parse_mode),
+                format=self._format_json(format_),
+                parent_topic=self._parent_topic_json(parent_topic),
+                requestId=request_id,
+            ),
+        )
+        return APIResponse.model_validate(data)
+
+    async def send_text_with_deeplink(
+        self,
+        chat_id: str,
+        text: str,
+        deeplink: str,
+        inline_keyboard_markup: Any = None,
+        parse_mode: ParseMode | str | None = _UNSET,
+        format_: dict[str, Any] | Any | None = None,
+    ) -> APIResponse:
+        """Send text with deeplink. ``messages/sendTextWithDeeplink``
+
+        *deeplink* is an identifier passed to the bot when a user taps
+        the deeplink button — useful for mini-app or bot-start scenarios.
+        """
+        data = await self._request(
+            "messages/sendTextWithDeeplink",
+            self._params(
+                chatId=chat_id,
+                text=text,
+                deeplink=deeplink,
                 inlineKeyboardMarkup=self._keyboard_json(inline_keyboard_markup),
                 parseMode=self._resolve_parse_mode(parse_mode),
                 format=self._format_json(format_),
@@ -313,24 +383,28 @@ class Bot:
         file_id: str | None = None,
         file: InputFile | BinaryIO | None = None,
         caption: str | None = None,
-        reply_msg_id: str | None = None,
+        reply_msg_id: str | list[str] | None = None,
         forward_chat_id: str | None = None,
-        forward_msg_id: str | None = None,
+        forward_msg_id: str | list[str] | None = None,
         inline_keyboard_markup: Any = None,
         parse_mode: ParseMode | str | None = _UNSET,
         format_: dict[str, Any] | Any | None = None,
+        parent_topic: ParentMessage | dict[str, Any] | None = None,
+        request_id: str | None = None,
     ) -> APIResponse:
         """Send file. ``messages/sendFile``"""
         params = self._params(
             chatId=chat_id,
             fileId=file_id,
             caption=caption,
-            replyMsgId=reply_msg_id,
+            replyMsgId=self._msg_ids(reply_msg_id),
             forwardChatId=forward_chat_id,
-            forwardMsgId=forward_msg_id,
+            forwardMsgId=self._msg_ids(forward_msg_id),
             inlineKeyboardMarkup=self._keyboard_json(inline_keyboard_markup),
             parseMode=self._resolve_parse_mode(parse_mode),
             format=self._format_json(format_),
+            parent_topic=self._parent_topic_json(parent_topic),
+            requestId=request_id,
         )
         files_dict = self._file_payload(file)
         data = await self._request("messages/sendFile", params, files_dict)
@@ -341,19 +415,23 @@ class Bot:
         chat_id: str,
         file_id: str | None = None,
         file: InputFile | BinaryIO | None = None,
-        reply_msg_id: str | None = None,
+        reply_msg_id: str | list[str] | None = None,
         forward_chat_id: str | None = None,
-        forward_msg_id: str | None = None,
+        forward_msg_id: str | list[str] | None = None,
         inline_keyboard_markup: Any = None,
+        parent_topic: ParentMessage | dict[str, Any] | None = None,
+        request_id: str | None = None,
     ) -> APIResponse:
         """Send voice message. ``messages/sendVoice``"""
         params = self._params(
             chatId=chat_id,
             fileId=file_id,
-            replyMsgId=reply_msg_id,
+            replyMsgId=self._msg_ids(reply_msg_id),
             forwardChatId=forward_chat_id,
-            forwardMsgId=forward_msg_id,
+            forwardMsgId=self._msg_ids(forward_msg_id),
             inlineKeyboardMarkup=self._keyboard_json(inline_keyboard_markup),
+            parent_topic=self._parent_topic_json(parent_topic),
+            requestId=request_id,
         )
         files_dict = self._file_payload(file)
         data = await self._request("messages/sendVoice", params, files_dict)
@@ -499,6 +577,21 @@ class Bot:
         """Remove members from chat. ``chats/members/delete``"""
         data = await self._request(
             "chats/members/delete",
+            self._params(
+                chatId=chat_id,
+                members=[{"sn": m} for m in members],
+            ),
+        )
+        return APIResponse.model_validate(data)
+
+    async def add_chat_members(
+        self,
+        chat_id: str,
+        members: list[str],
+    ) -> APIResponse:
+        """Add members to chat. ``chats/members/add``"""
+        data = await self._request(
+            "chats/members/add",
             self._params(
                 chatId=chat_id,
                 members=[{"sn": m} for m in members],

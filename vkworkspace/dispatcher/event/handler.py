@@ -4,7 +4,7 @@ import inspect
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +27,8 @@ class FilterObject:
         # BaseFilter or async callable
         if callable(cb):
             if inspect.iscoroutinefunction(cb.__call__) or inspect.iscoroutinefunction(cb):
-                return await cb(event, **kwargs)
-            return cb(event, **kwargs)
+                return cast(bool | dict[str, Any], await cb(event, **kwargs))
+            return cast(bool | dict[str, Any], cb(event, **kwargs))
 
         return bool(cb)
 
@@ -39,7 +39,7 @@ class HandlerObject:
     filters: list[FilterObject] | None = None
     flags: dict[str, Any] = field(default_factory=dict)
 
-    _params: set[str] = field(default=None, init=False, repr=False)  # type: ignore[assignment]
+    _params: set[str] = field(default_factory=set, init=False, repr=False)
     _has_kwargs: bool = field(default=False, init=False, repr=False)
 
     def __post_init__(self) -> None:

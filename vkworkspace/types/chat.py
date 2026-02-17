@@ -3,6 +3,7 @@ from __future__ import annotations
 from pydantic import Field
 
 from .base import VKTeamsObject
+from .user import Photo
 
 
 class Chat(VKTeamsObject):
@@ -20,6 +21,8 @@ class ChatInfo(VKTeamsObject):
     rules: str | None = None
     title: str | None = None
     is_bot: bool | None = Field(default=None, alias="isBot")
+    phone: str | None = None
+    photos: list[Photo] = Field(default_factory=list)
     public: bool | None = None
     join_moderation: bool | None = Field(default=None, alias="joinModeration")
     invite_link: str | None = Field(default=None, alias="inviteLink")

@@ -64,7 +64,8 @@ class RedisStorage(BaseStorage):
         result = await self._redis.get(redis_key)
         if result is not None:
             raw = result.decode() if isinstance(result, bytes) else result
-            return json.loads(raw)
+            loaded: dict[str, Any] = json.loads(raw)
+            return loaded
         return {}
 
     async def close(self) -> None:

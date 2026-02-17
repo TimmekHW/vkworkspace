@@ -544,6 +544,11 @@ await bot.get_me()
 
 # Messages
 await bot.send_text(chat_id, "Hello!", parse_mode="HTML")
+await bot.send_text(chat_id, "Hi", reply_msg_id=msg_id)               # Reply
+await bot.send_text(chat_id, "Hi", reply_msg_id=[id1, id2])           # Multi-reply
+await bot.send_text(chat_id, "Hi", forward_chat_id=cid, forward_msg_id=mid)  # Forward
+await bot.send_text(chat_id, "Hi", request_id="unique-123")           # Idempotent send
+await bot.send_text_with_deeplink(chat_id, "Open", deeplink="payload")  # Deeplink
 await bot.edit_text(chat_id, msg_id, "Updated")
 await bot.delete_messages(chat_id, msg_id)
 await bot.send_file(chat_id, file=InputFile("photo.jpg"), caption="Look!")
@@ -563,7 +568,8 @@ await bot.set_chat_avatar(chat_id, file=InputFile("avatar.png"))
 await bot.block_user(chat_id, user_id, del_last_messages=True)
 await bot.unblock_user(chat_id, user_id)
 await bot.resolve_pending(chat_id, approve=True, user_id=uid)
-await bot.delete_chat_members(chat_id, members=[uid1, uid2])
+await bot.add_chat_members(chat_id, members=[uid1, uid2])              # Add members
+await bot.delete_chat_members(chat_id, members=[uid1, uid2])           # Remove members
 await bot.pin_message(chat_id, msg_id)
 await bot.unpin_message(chat_id, msg_id)
 await bot.send_actions(chat_id, "typing")
@@ -618,6 +624,41 @@ await message.answer(
 
 > Mini-apps are registered via **Metabot** (`/newapp`) — the same bot used for bot management (`/newbot`).
 
+## Testing
+
+The project includes two types of tests:
+
+### Unit Tests (mocked)
+
+```bash
+pip install -e ".[dev]"
+pytest tests/test_bot_api.py -v
+```
+
+93 tests covering all Bot API methods with mocked HTTP transport — no real API calls.
+
+### Live API Tests
+
+Run against a real VK Teams instance to verify all methods work in your environment:
+
+```bash
+python tests/test_bot_live.py \
+    --token "YOUR_BOT_TOKEN" \
+    --api-url "https://myteam.mail.ru/bot/v1" \
+    --chat "GROUP_CHAT_ID"
+```
+
+Or via environment variables:
+
+```bash
+export VKWS_TOKEN="..."
+export VKWS_API_URL="https://myteam.mail.ru/bot/v1"
+export VKWS_CHAT_ID="12345@chat.agent"
+python tests/test_bot_live.py
+```
+
+The live test sends real messages, tests all endpoints, and cleans up after itself. Methods unsupported on your installation (e.g. threads) are automatically skipped.
+
 ## Examples
 
 | Example | Description |
@@ -626,11 +667,12 @@ await message.answer(
 | [keyboard_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/keyboard_bot.py) | Inline keyboards + callback handling |
 | [fsm_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/fsm_bot.py) | Multi-step dialog with FSM |
 | [middleware_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/middleware_bot.py) | Custom middleware (logging, access control) |
+| [formatting_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/formatting_bot.py) | MarkdownV2/HTML formatting + Text builder |
 | [proxy_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/proxy_bot.py) | Corporate proxy + rate limiter |
 | [error_handling_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/error_handling_bot.py) | Error handlers, lifecycle hooks, edited message routing |
 | [custom_prefix_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/custom_prefix_bot.py) | Custom command prefixes, regex commands, argument parsing |
 | [multi_router_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/multi_router_bot.py) | Modular sub-routers, chat events (join/leave/pin) |
-| [formatting_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/formatting_bot.py) | MarkdownV2/HTML formatting + split_text for long messages |
+| [event_logger_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/event_logger_bot.py) | Logs all 9 event types to JSONL file |
 
 ## Project Structure
 

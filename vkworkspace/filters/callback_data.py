@@ -26,4 +26,4 @@ class CallbackData(BaseFilter):
 
         if isinstance(self.data, re.Pattern):
             return bool(self.data.search(callback_data))
-        return callback_data == self.data
+        return bool(callback_data == self.data)
