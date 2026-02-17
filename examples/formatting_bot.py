@@ -5,6 +5,10 @@ Text formatting bot — demonstrates three formatting approaches:
 2. Text builder (Bold, Italic, ...) — composable nodes with auto parse_mode
 3. Raw markdown — write **bold** directly with bot's default parse_mode
 
+parse_mode can be set in two places:
+    - Bot(parse_mode=ParseMode.HTML) — default for ALL messages
+    - message.answer(text, parse_mode=ParseMode.HTML) — override per message
+
 Commands:
     /md       — MarkdownV2 with string helpers
     /html     — HTML with string helpers
@@ -65,8 +69,9 @@ async def cmd_markdown(message: Message) -> None:
         md.mention("user@company.ru"),
         md.quote("This is a quote"),
     ])
-    # Override bot default: this message uses MarkdownV2 instead of HTML
-    await message.answer(text, parse_mode="MarkdownV2")
+    # ── Option 2: override per message ──
+    # Bot default is HTML, but this specific message uses MarkdownV2
+    await message.answer(text, parse_mode=ParseMode.MARKDOWNV2)
 
 
 @router.message(Command("html"))
@@ -84,7 +89,7 @@ async def cmd_html(message: Message) -> None:
         "",
         html.unordered_list(["Item A", "Item B", "Item C"]),
     ])
-    # parse_mode="HTML" is inherited from Bot — no need to pass it
+    # parse_mode inherited from Bot(parse_mode=HTML) — no need to pass it
     await message.answer(text)
 
 
@@ -121,7 +126,7 @@ async def cmd_long(message: Message) -> None:
         f"Line {i}: {'A' * 50}" for i in range(1, 101)
     )
     chunks = split_text(long_text)
-    # parse_mode=None disables formatting for this plain-text message
+    # parse_mode=None disables formatting even if Bot has a default
     await message.answer(
         f"Splitting {len(long_text)} chars into {len(chunks)} chunks...",
         parse_mode=None,
@@ -152,10 +157,12 @@ async def echo_formatted(message: Message) -> None:
 
 
 async def main() -> None:
+    # ── Option 1: set parse_mode globally on Bot ──
+    # Every send_text / answer / reply will use HTML unless overridden
     bot = Bot(
         token="YOUR_BOT_TOKEN",
         api_url="https://myteam.mail.ru/bot/v1",
-        parse_mode=ParseMode.HTML,  # All messages use HTML by default
+        parse_mode=ParseMode.HTML,
     )
     dp = Dispatcher()
     dp.include_router(router)

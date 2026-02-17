@@ -8,6 +8,7 @@ from typing import Any, BinaryIO
 
 import httpx
 
+from vkworkspace.enums import ParseMode
 from vkworkspace.exceptions import VKTeamsAPIError
 from vkworkspace.types.chat import ChatInfo
 from vkworkspace.types.event import Update
@@ -79,7 +80,7 @@ class Bot:
         poll_time: int = 60,
         rate_limit: float | None = None,
         proxy: str | None = None,
-        parse_mode: str | None = None,
+        parse_mode: ParseMode | str | None = None,
     ) -> None:
         self.token = token
         self.api_url = api_url.rstrip("/")
@@ -238,7 +239,7 @@ class Bot:
         forward_chat_id: str | None = None,
         forward_msg_id: str | None = None,
         inline_keyboard_markup: Any = None,
-        parse_mode: Any = _UNSET,
+        parse_mode: ParseMode | str | None = _UNSET,
         format_: dict[str, Any] | Any | None = None,
     ) -> APIResponse:
         """Send text message. ``messages/sendText``"""
@@ -270,7 +271,7 @@ class Bot:
         msg_id: str,
         text: str,
         inline_keyboard_markup: Any = None,
-        parse_mode: Any = _UNSET,
+        parse_mode: ParseMode | str | None = _UNSET,
         format_: dict[str, Any] | Any | None = None,
     ) -> APIResponse:
         """Edit message text. ``messages/editText``"""
@@ -316,7 +317,7 @@ class Bot:
         forward_chat_id: str | None = None,
         forward_msg_id: str | None = None,
         inline_keyboard_markup: Any = None,
-        parse_mode: Any = _UNSET,
+        parse_mode: ParseMode | str | None = _UNSET,
         format_: dict[str, Any] | Any | None = None,
     ) -> APIResponse:
         """Send file. ``messages/sendFile``"""

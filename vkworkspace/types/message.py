@@ -9,7 +9,9 @@ from .chat import Chat
 from .user import Contact
 
 if TYPE_CHECKING:
-    pass
+    from vkworkspace.enums import ParseMode
+
+_UNSET: Any = object()
 
 
 class Part(VKTeamsObject):
@@ -27,14 +29,34 @@ class Message(VKTeamsObject):
     format: dict[str, Any] | None = None
     parts: list[Part] = Field(default_factory=list)
 
-    async def answer(self, text: str, **kwargs: Any) -> Any:
+    async def answer(
+        self,
+        text: str,
+        parse_mode: ParseMode | str | None = _UNSET,
+        inline_keyboard_markup: Any = None,
+        **kwargs: Any,
+    ) -> Any:
+        if parse_mode is not _UNSET:
+            kwargs["parse_mode"] = parse_mode
+        if inline_keyboard_markup is not None:
+            kwargs["inline_keyboard_markup"] = inline_keyboard_markup
         return await self.bot.send_text(
             chat_id=self.chat.chat_id,
             text=text,
             **kwargs,
         )
 
-    async def reply(self, text: str, **kwargs: Any) -> Any:
+    async def reply(
+        self,
+        text: str,
+        parse_mode: ParseMode | str | None = _UNSET,
+        inline_keyboard_markup: Any = None,
+        **kwargs: Any,
+    ) -> Any:
+        if parse_mode is not _UNSET:
+            kwargs["parse_mode"] = parse_mode
+        if inline_keyboard_markup is not None:
+            kwargs["inline_keyboard_markup"] = inline_keyboard_markup
         return await self.bot.send_text(
             chat_id=self.chat.chat_id,
             text=text,
@@ -48,7 +70,17 @@ class Message(VKTeamsObject):
             msg_id=self.msg_id,
         )
 
-    async def edit_text(self, text: str, **kwargs: Any) -> Any:
+    async def edit_text(
+        self,
+        text: str,
+        parse_mode: ParseMode | str | None = _UNSET,
+        inline_keyboard_markup: Any = None,
+        **kwargs: Any,
+    ) -> Any:
+        if parse_mode is not _UNSET:
+            kwargs["parse_mode"] = parse_mode
+        if inline_keyboard_markup is not None:
+            kwargs["inline_keyboard_markup"] = inline_keyboard_markup
         return await self.bot.edit_text(
             chat_id=self.chat.chat_id,
             msg_id=self.msg_id,
@@ -73,8 +105,14 @@ class Message(VKTeamsObject):
         file_id: str | None = None,
         file: Any = None,
         caption: str | None = None,
+        parse_mode: ParseMode | str | None = _UNSET,
+        inline_keyboard_markup: Any = None,
         **kwargs: Any,
     ) -> Any:
+        if parse_mode is not _UNSET:
+            kwargs["parse_mode"] = parse_mode
+        if inline_keyboard_markup is not None:
+            kwargs["inline_keyboard_markup"] = inline_keyboard_markup
         return await self.bot.send_file(
             chat_id=self.chat.chat_id,
             file_id=file_id,
@@ -87,8 +125,11 @@ class Message(VKTeamsObject):
         self,
         file_id: str | None = None,
         file: Any = None,
+        inline_keyboard_markup: Any = None,
         **kwargs: Any,
     ) -> Any:
+        if inline_keyboard_markup is not None:
+            kwargs["inline_keyboard_markup"] = inline_keyboard_markup
         return await self.bot.send_voice(
             chat_id=self.chat.chat_id,
             file_id=file_id,

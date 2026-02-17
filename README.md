@@ -162,26 +162,30 @@ bot = Bot(
 
 ### Default Parse Mode
 
-Set `parse_mode` on the Bot to apply it automatically to all `send_text`, `edit_text`, and `send_file` calls — no need to pass it every time (aiogram-style):
+`parse_mode` can be set in **two places** — globally on `Bot`, or per-message on `answer()` / `reply()` / `send_text()`:
 
 ```python
 from vkworkspace.enums import ParseMode
 
+# ── 1. Global default on Bot ──────────────────────────────────────
+# Applies to ALL send_text / answer / reply / edit_text / send_file
 bot = Bot(
     token="TOKEN",
     api_url="https://myteam.mail.ru/bot/v1",
-    parse_mode=ParseMode.HTML,  # or "MarkdownV2"
+    parse_mode=ParseMode.HTML,  # or ParseMode.MARKDOWNV2
 )
 
-# parse_mode="HTML" is sent automatically
+# parse_mode="HTML" is sent automatically — no need to pass it
 await message.answer(f"{html.bold('Hello')}, world!")
 
-# Override for a single call
-await message.answer("*bold*", parse_mode="MarkdownV2")
+# ── 2. Override per message ───────────────────────────────────────
+await message.answer("*bold*", parse_mode=ParseMode.MARKDOWNV2)
 
-# Disable for a single call
+# ── 3. Disable for a single message ──────────────────────────────
 await message.answer("plain text", parse_mode=None)
 ```
+
+> **Tip:** IDE autocomplete works — type `parse_mode=ParseMode.` and your editor will suggest `HTML` and `MARKDOWNV2`.
 
 ## Dispatcher
 

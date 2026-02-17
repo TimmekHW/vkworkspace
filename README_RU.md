@@ -161,26 +161,30 @@ bot = Bot(
 
 ### Режим парсинга по умолчанию
 
-Укажите `parse_mode` при создании бота — он автоматически применится ко всем вызовам `send_text`, `edit_text` и `send_file`. Не нужно передавать его каждый раз (как в aiogram):
+`parse_mode` можно указать в **двух местах** — глобально на `Bot` или для конкретного сообщения в `answer()` / `reply()` / `send_text()`:
 
 ```python
 from vkworkspace.enums import ParseMode
 
+# ── 1. Глобальный дефолт на Bot ──────────────────────────────────
+# Применяется ко ВСЕМ send_text / answer / reply / edit_text / send_file
 bot = Bot(
     token="TOKEN",
     api_url="https://myteam.mail.ru/bot/v1",
-    parse_mode=ParseMode.HTML,  # или "MarkdownV2"
+    parse_mode=ParseMode.HTML,  # или ParseMode.MARKDOWNV2
 )
 
-# parse_mode="HTML" отправляется автоматически
+# parse_mode="HTML" отправляется автоматически — передавать не нужно
 await message.answer(f"{html.bold('Привет')}, мир!")
 
-# Переопределить для одного вызова
-await message.answer("*жирный*", parse_mode="MarkdownV2")
+# ── 2. Переопределить для конкретного сообщения ──────────────────
+await message.answer("*жирный*", parse_mode=ParseMode.MARKDOWNV2)
 
-# Отключить для одного вызова
+# ── 3. Отключить для конкретного сообщения ───────────────────────
 await message.answer("обычный текст", parse_mode=None)
 ```
+
+> **Подсказка:** автодополнение IDE работает — наберите `parse_mode=ParseMode.` и редактор предложит `HTML` и `MARKDOWNV2`.
 
 ## Диспетчер
 
