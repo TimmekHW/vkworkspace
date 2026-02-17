@@ -2,6 +2,8 @@ from enum import StrEnum
 
 
 class StyleType(StrEnum):
+    """Text formatting styles for the ``format`` parameter."""
+
     BOLD = "bold"
     ITALIC = "italic"
     UNDERLINE = "underline"

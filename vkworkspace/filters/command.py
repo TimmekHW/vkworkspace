@@ -9,7 +9,23 @@ from .base import BaseFilter
 
 @dataclass
 class CommandObject:
-    """Parsed command result, injected into handler kwargs as ``command``."""
+    """Parsed command, auto-injected as ``command`` kwarg in handler.
+
+    Attributes:
+        prefix: The prefix character (e.g. ``"/"``).
+        command: The command name without prefix (e.g. ``"start"``).
+        args: Everything after the command (e.g. ``"arg1 arg2"``).
+        raw_text: Original full text.
+        match: Regex match object (only when using regex commands).
+
+    Example::
+
+        @router.message(Command("greet"))
+        async def greet(message: Message, command: CommandObject):
+            name = command.args or "World"
+            await message.answer(f"Hello, {name}!")
+            # /greet John -> "Hello, John!"
+    """
 
     prefix: str
     command: str
@@ -19,16 +35,24 @@ class CommandObject:
 
 
 class Command(BaseFilter):
-    """
-    Filter for bot commands.
+    """Filter for bot commands (e.g. ``/start``, ``/help arg1 arg2``).
 
-    Usage::
+    On match, injects ``command: CommandObject`` into handler kwargs.
+
+    Args:
+        *commands: Command names or regex patterns to match.
+            If empty, matches **any** command.
+        prefix: Command prefix(es). Default ``"/"``.
+            Use ``("/" , "!", "")`` for multiple prefixes.
+        ignore_case: Case-insensitive matching (default ``True``).
+
+    Examples::
 
         @router.message(Command("start"))
-        @router.message(Command("help", "info"))
-        @router.message(Command(re.compile(r"cmd_\\d+")))
-        @router.message(Command("start", prefix="/"))
-        @router.message(Command("menu", prefix=("/", "!", "#", "")))
+        @router.message(Command("help", "info"))           # either
+        @router.message(Command(re.compile(r"cmd_\\d+")))  # regex
+        @router.message(Command("menu", prefix=("!", "/")))
+        @router.message(Command())                         # any command
     """
 
     def __init__(

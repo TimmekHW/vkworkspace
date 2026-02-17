@@ -12,10 +12,27 @@ logger = logging.getLogger(__name__)
 
 
 class Router:
-    """
-    Handler registration hub. Mirrors aiogram 3's Router.
+    """Handler registration hub. Mirrors aiogram 3's Router.
 
-    Usage::
+    Each router has observers for all VK Teams event types.
+    Register handlers with decorators and combine routers into a tree.
+
+    Available decorators:
+        - ``@router.message()`` — new messages
+        - ``@router.edited_message()`` — edited messages
+        - ``@router.deleted_message()`` — deleted messages
+        - ``@router.callback_query()`` — inline button presses
+        - ``@router.new_chat_members()`` — users joined
+        - ``@router.left_chat_members()`` — users left
+        - ``@router.pinned_message()`` — message pinned
+        - ``@router.unpinned_message()`` — message unpinned
+        - ``@router.changed_chat_info()`` — chat info changed
+        - ``@router.error()`` — unhandled exceptions
+
+    Handler priority: routers are checked in include order.
+    First matching handler wins; remaining handlers are skipped.
+
+    Example::
 
         router = Router(name="my_router")
 
@@ -26,6 +43,10 @@ class Router:
         @router.callback_query(F.callback_data == "action")
         async def callback(query: CallbackQuery):
             await query.answer("Done!")
+
+        # Combine routers — order matters for priority
+        dp = Dispatcher()
+        dp.include_routers(admin_router, user_router)
     """
 
     def __init__(self, name: str | None = None) -> None:
@@ -62,6 +83,14 @@ class Router:
         self._on_shutdown: list[Callable[..., Any]] = []
 
     def include_router(self, router: Router) -> None:
+        """Attach a sub-router. Handlers in it will be checked after this router's own handlers.
+
+        Args:
+            router: Router to include. A router can only be included once.
+
+        Raises:
+            RuntimeError: If the router is already attached to another parent.
+        """
         if router._parent_router is not None:
             raise RuntimeError(
                 f"Router '{router.name}' is already included in "
@@ -71,6 +100,12 @@ class Router:
         self._sub_routers.append(router)
 
     def include_routers(self, *routers: Router) -> None:
+        """Attach multiple sub-routers at once. Order = handler priority.
+
+        Example::
+
+            dp.include_routers(admin_router, user_router, fallback_router)
+        """
         for router in routers:
             self.include_router(router)
 
@@ -119,6 +154,17 @@ class Router:
     def on_startup(
         self, callback: Callable[..., Any] | None = None
     ) -> Any:
+        """Register a startup hook. Runs before polling starts.
+
+        Can be used as a decorator or called directly::
+
+            @dp.on_startup
+            async def setup():
+                print("Bot is starting...")
+
+            # or
+            dp.on_startup(my_setup_function)
+        """
         if callback:
             self._on_startup.append(callback)
             return callback
@@ -132,6 +178,14 @@ class Router:
     def on_shutdown(
         self, callback: Callable[..., Any] | None = None
     ) -> Any:
+        """Register a shutdown hook. Runs after polling stops.
+
+        Example::
+
+            @dp.on_shutdown
+            async def cleanup():
+                await db.close()
+        """
         if callback:
             self._on_shutdown.append(callback)
             return callback

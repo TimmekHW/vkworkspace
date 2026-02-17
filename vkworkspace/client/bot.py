@@ -85,6 +85,23 @@ class Bot:
         retry_on_5xx: int | None = 3,
         verify_ssl: bool = True,
     ) -> None:
+        """
+        Args:
+            token: Bot token from BotFather.
+            api_url: Base API URL (e.g. ``"https://myteam.mail.ru/bot/v1"``
+                for on-premise VK Teams).
+            timeout: HTTP request timeout in seconds (default 30).
+            poll_time: Long-poll timeout in seconds (default 60).
+            rate_limit: Max requests per second. ``None`` = unlimited.
+            proxy: HTTP proxy URL (e.g. ``"http://proxy:8535"``).
+                Only affects Bot API requests.
+            parse_mode: Default parse mode for all messages
+                (``"HTML"`` / ``"MarkdownV2"`` / ``None``).
+            retry_on_5xx: Retry count on 5xx errors. ``3`` = up to 3 retries
+                with exponential backoff. ``None`` or ``0`` = no retries.
+            verify_ssl: Verify server TLS certificate. Set ``False`` for
+                self-signed certs on on-premise servers.
+        """
         self.token = token
         self.api_url = api_url.rstrip("/")
         self.timeout = timeout
@@ -313,12 +330,33 @@ class Bot:
         parent_topic: ParentMessage | dict[str, Any] | None = None,
         request_id: str | None = None,
     ) -> APIResponse:
-        """Send text message. ``messages/sendText``
+        """Send a text message. ``messages/sendText``
 
-        Pass *parent_topic* to send the message inside a thread.
-        *reply_msg_id* and *forward_msg_id* accept a single ID or a list.
-        *request_id* — idempotency key; the server will not create a
-        duplicate message if the same *request_id* is sent again.
+        Args:
+            chat_id: Target chat ID (email-like, e.g. ``"user@company.ru"``).
+            text: Message text (max ~4096 chars recommended).
+            reply_msg_id: Message ID(s) to reply to.
+            forward_chat_id: Chat to forward from.
+            forward_msg_id: Message ID(s) to forward.
+            inline_keyboard_markup: Inline keyboard
+                (``InlineKeyboardBuilder.as_markup()`` or raw JSON).
+            parse_mode: ``"HTML"`` / ``"MarkdownV2"`` / ``None``.
+                Defaults to ``bot.parse_mode``.
+            format_: Offset/length formatting (``FormatBuilder`` or raw dict).
+            parent_topic: Send inside a thread.
+            request_id: Idempotency key — prevents duplicate messages.
+
+        Returns:
+            APIResponse with ``msg_id`` and ``ok`` status.
+
+        Example::
+
+            await bot.send_text("user@corp.ru", "Hello!")
+
+            # With keyboard
+            builder = InlineKeyboardBuilder()
+            builder.button(text="OK", callback_data="ok")
+            await bot.send_text(chat_id, "Choose:", inline_keyboard_markup=builder.as_markup())
         """
         if len(text) > self.TEXT_LENGTH_WARNING:
             logger.warning(
@@ -428,7 +466,42 @@ class Bot:
         parent_topic: ParentMessage | dict[str, Any] | None = None,
         request_id: str | None = None,
     ) -> APIResponse:
-        """Send file. ``messages/sendFile``"""
+        """Send a file or image. ``messages/sendFile``
+
+        Images (JPG/PNG/WEBP/GIF) are displayed inline as photos.
+        Other files appear as document attachments.
+
+        Provide either *file* (upload) or *file_id* (resend existing).
+
+        Args:
+            chat_id: Target chat ID.
+            file_id: ID of a previously uploaded file (no re-upload needed).
+            file: File to upload — ``InputFile``, or open ``BinaryIO``.
+            caption: Text caption shown below the file.
+            reply_msg_id: Message ID(s) to reply to.
+            forward_chat_id: Chat to forward from.
+            forward_msg_id: Message ID(s) to forward.
+            inline_keyboard_markup: Inline keyboard.
+            parse_mode: Parse mode for caption.
+            format_: Offset/length formatting for caption.
+            parent_topic: Send inside a thread.
+            request_id: Idempotency key.
+
+        Returns:
+            APIResponse with ``msg_id``, ``file_id``, ``ok``.
+
+        Example::
+
+            # Upload from disk
+            await bot.send_file(chat_id, file=InputFile("report.pdf"))
+
+            # Photo from URL
+            photo = await InputFile.from_url("https://http.cat/200.jpg")
+            await bot.send_file(chat_id, file=photo, caption="OK cat")
+
+            # Resend by file_id (instant, no re-upload)
+            await bot.send_file(chat_id, file_id="abc123")
+        """
         params = self._params(
             chatId=chat_id,
             fileId=file_id,
@@ -458,7 +531,33 @@ class Bot:
         parent_topic: ParentMessage | dict[str, Any] | None = None,
         request_id: str | None = None,
     ) -> APIResponse:
-        """Send voice message. ``messages/sendVoice``"""
+        """Send a voice message. ``messages/sendVoice``
+
+        The recommended format is **OGG/Opus**. Use
+        ``vkworkspace.utils.voice.convert_to_ogg_opus()`` to convert
+        from MP3/WAV/FLAC (requires ``pip install av``).
+
+        Args:
+            chat_id: Target chat ID.
+            file_id: ID of a previously uploaded voice (no re-upload).
+            file: Voice file — ``InputFile`` with OGG/Opus data.
+            reply_msg_id: Message ID(s) to reply to.
+            forward_chat_id: Chat to forward from.
+            forward_msg_id: Message ID(s) to forward.
+            inline_keyboard_markup: Inline keyboard.
+            parent_topic: Send inside a thread.
+            request_id: Idempotency key.
+
+        Returns:
+            APIResponse with ``msg_id``, ``file_id``, ``ok``.
+
+        Example::
+
+            from vkworkspace.utils.voice import convert_to_ogg_opus
+
+            ogg = convert_to_ogg_opus("recording.mp3")
+            await bot.send_voice(chat_id, file=InputFile(ogg, filename="voice.ogg"))
+        """
         params = self._params(
             chatId=chat_id,
             fileId=file_id,
@@ -480,7 +579,23 @@ class Bot:
         show_alert: bool = False,
         url: str | None = None,
     ) -> APIResponse:
-        """Answer callback query. ``messages/answerCallbackQuery``"""
+        """Answer a callback query (inline button press).
+
+        Must be called within ~30s of receiving the callback, otherwise
+        the user sees a loading spinner.
+
+        Args:
+            query_id: ID from ``CallbackQuery.query_id``.
+            text: Notification text shown to the user.
+            show_alert: Show as a popup alert instead of a toast.
+            url: URL to open in the user's browser.
+
+        Example::
+
+            @router.callback_query(F.callback_data == "confirm")
+            async def on_confirm(query: CallbackQuery):
+                await query.answer("Done!")  # uses this method internally
+        """
         data = await self._request(
             "messages/answerCallbackQuery",
             self._params(

@@ -11,6 +11,27 @@ from .user import Contact
 
 
 class CallbackQuery(VKTeamsObject):
+    """Incoming callback from an inline keyboard button press.
+
+    Received in ``@router.callback_query()`` handlers.
+
+    Attributes:
+        query_id: Unique query ID (used internally by ``.answer()``).
+        chat: Chat where the button was pressed.
+        from_user: User who pressed the button.
+        message: Original message that contained the keyboard.
+        callback_data: Data string from the pressed button.
+
+    Example::
+
+        @router.callback_query(F.callback_data == "confirm")
+        async def on_confirm(query: CallbackQuery):
+            await query.answer("Done!")
+            # Edit the original message
+            if query.message:
+                await query.message.edit_text("Confirmed!")
+    """
+
     query_id: str = Field(alias="queryId")
     chat: Chat | None = None
     from_user: Contact | None = Field(default=None, alias="from")
@@ -32,6 +53,16 @@ class CallbackQuery(VKTeamsObject):
         show_alert: bool = False,
         url: str | None = None,
     ) -> Any:
+        """Respond to the callback query.
+
+        Must be called within ~30 seconds, otherwise the user sees a
+        loading spinner on the button.
+
+        Args:
+            text: Notification text (toast or alert).
+            show_alert: ``True`` = popup alert, ``False`` = small toast.
+            url: URL to open in the user's browser.
+        """
         return await self.bot.answer_callback_query(
             query_id=self.query_id,
             text=text,

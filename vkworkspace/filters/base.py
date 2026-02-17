@@ -5,15 +5,25 @@ from typing import Any
 
 
 class BaseFilter(ABC):
-    """
-    Base class for all filters.
+    """Base class for custom filters.
 
-    Usage::
+    Subclass and implement ``__call__`` to create your own filter.
+    Return ``True``/``False``, or a ``dict`` to inject extra kwargs into
+    the handler.
+
+    Supports combining with operators: ``&`` (and), ``|`` (or), ``~`` (not).
+
+    Example::
 
         class IsAdmin(BaseFilter):
-            async def __call__(self, message: Message, **kwargs) -> bool:
-                admins = await message.bot.get_chat_admins(message.chat.chat_id)
-                return any(a.user_id == message.from_user.user_id for a in admins)
+            async def __call__(self, event, **kwargs) -> bool:
+                admins = await event.bot.get_chat_admins(event.chat.chat_id)
+                return any(a.user_id == event.from_user.user_id for a in admins)
+
+        # Combining filters
+        @router.message(IsAdmin() & Command("ban"))
+        @router.message(IsAdmin() | IsModerator())
+        @router.message(~IsAdmin())  # NOT admin
     """
 
     @abstractmethod

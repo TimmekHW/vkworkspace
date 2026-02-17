@@ -7,12 +7,22 @@ from .user import Photo
 
 
 class Chat(VKTeamsObject):
+    """Chat reference (available as ``message.chat``).
+
+    Attributes:
+        chat_id: Chat ID (email-like for DMs, hash for groups).
+        type: ``"private"``, ``"group"``, or ``"channel"``.
+        title: Group/channel title (``None`` for private chats).
+    """
+
     chat_id: str = Field(alias="chatId")
     type: str = ""
     title: str | None = None
 
 
 class ChatInfo(VKTeamsObject):
+    """Full chat information. Returned by ``bot.get_chat_info()``."""
+
     type: str = ""
     first_name: str | None = Field(default=None, alias="firstName")
     last_name: str | None = Field(default=None, alias="lastName")

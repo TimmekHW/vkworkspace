@@ -2,6 +2,8 @@ from enum import StrEnum
 
 
 class EventType(StrEnum):
+    """VK Teams event types received from the long-poll API."""
+
     NEW_MESSAGE = "newMessage"
     EDITED_MESSAGE = "editedMessage"
     DELETED_MESSAGE = "deletedMessage"

@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-02-18
+
+### Added
+- `InputFile.from_url()` — async download from URL with auto-detected filename and `max_size` protection (default 50 MB)
+- `InputFile.from_base64()` — create InputFile from base64-encoded string
+- `vkworkspace.utils.voice` module — `convert_to_ogg_opus()` for audio-to-OGG/Opus conversion (MP3, WAV, FLAC, etc.)
+- `voice` optional dependency (`pip install vkworkspace[voice]`) — PyAV for audio conversion
+- Comprehensive docstrings with Args, Returns, Raises, Examples across all public API: Bot, Dispatcher, Router, FSMContext, Message, CallbackQuery, InputFile, InlineKeyboardBuilder, FormatBuilder, all types and enums
+- Exponential backoff in polling loop (2s → 4s → 8s → … → 60s max) with auto-reconnect and connection restored logging
+- Full traceback (`exc_info=True`) on first polling error for easier debugging
+- New tests: `test_input_file.py` (17 tests), `test_voice.py` (7 tests)
+
 ## [1.4.1] - 2026-02-17
 
 ### Fixed
@@ -125,6 +137,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Inline keyboard builder utility
 - 10 example bots (echo, keyboard, FSM, middleware, proxy, diagnostic, API tester, etc.)
 
+[1.5.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/TimmekHW/vkworkspace/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.2.2...v1.3.0

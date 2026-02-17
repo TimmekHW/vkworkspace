@@ -35,14 +35,27 @@ EVENT_TYPE_MAP: dict[str, str] = {
 
 
 class Dispatcher(Router):
-    """
-    Root router + polling loop + middleware chain.
+    """Root router + polling loop + FSM injection.
+
+    The Dispatcher is the entry point of the framework. It receives raw
+    events from ``bot.get_events()``, resolves them into typed objects
+    (``Message``, ``CallbackQuery``, etc.), injects FSM context, and
+    propagates through the router tree.
 
     Usage::
 
-        dp = Dispatcher(storage=MemoryStorage())
+        dp = Dispatcher()                              # basic
+        dp = Dispatcher(storage=MemoryStorage())       # explicit storage
+        dp = Dispatcher(session_timeout=300)           # auto-clear FSM after 5 min
+
         dp.include_router(my_router)
         await dp.start_polling(bot)
+
+    Features:
+        - Long-polling with auto-reconnect and exponential backoff
+        - FSM context injection (``state: FSMContext`` in handlers)
+        - Session timeout (auto-clear stale FSM sessions)
+        - Graceful shutdown on SIGINT/SIGTERM
     """
 
     def __init__(
@@ -53,6 +66,18 @@ class Dispatcher(Router):
         handle_edited_as_message: bool = False,
         session_timeout: float | None = None,
     ) -> None:
+        """
+        Args:
+            storage: FSM storage backend. Defaults to ``MemoryStorage()``.
+                Use ``RedisStorage`` for multi-process deployments.
+            fsm_strategy: FSM key strategy — ``"user_in_chat"`` (default)
+                or ``"user"``.
+            name: Router name (for logging).
+            handle_edited_as_message: Route ``editedMessage`` events to
+                ``@router.message()`` handlers (default ``False``).
+            session_timeout: Auto-clear FSM state after N seconds of
+                inactivity. ``None`` = never expire (default).
+        """
         super().__init__(name=name or "Dispatcher")
 
         # Lazy import to avoid circular dependency
@@ -187,23 +212,51 @@ class Dispatcher(Router):
 
     async def _polling(self, bot: Any) -> None:
         logger.info("Polling started")
+        consecutive_errors = 0
         while self._running:
             try:
                 updates = await bot.get_events()
+                if consecutive_errors:
+                    logger.info("Connection restored after %d retries", consecutive_errors)
+                consecutive_errors = 0
                 for update in updates:
                     await self.feed_update(bot, update)
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.exception("Polling error: %s", e)
-                await asyncio.sleep(1)
+                consecutive_errors += 1
+                delay = min(2 ** consecutive_errors, 60)
+                msg = "Polling error (%d): %s — retrying in %ds"
+                if consecutive_errors == 1:
+                    logger.warning(msg, consecutive_errors, e, delay, exc_info=True)
+                elif consecutive_errors <= 3:
+                    logger.warning(msg, consecutive_errors, e, delay)
+                else:
+                    logger.debug(msg, consecutive_errors, e, delay)
+                await asyncio.sleep(delay)
 
     async def start_polling(
         self,
         *bots: Any,
         skip_updates: bool = False,
     ) -> None:
-        """Start long-polling for one or more bots."""
+        """Start long-polling for one or more bots.
+
+        Blocks until stopped by SIGINT/SIGTERM or ``dp.stop()``.
+        Auto-reconnects on network errors with exponential backoff
+        (2s → 4s → 8s → … → 60s max).
+
+        Args:
+            *bots: One or more ``Bot`` instances to poll.
+            skip_updates: Discard pending updates on startup (default False).
+
+        Example::
+
+            bot = Bot(token="TOKEN", api_url="https://myteam.mail.ru/bot/v1")
+            dp = Dispatcher()
+            dp.include_router(router)
+            await dp.start_polling(bot)
+        """
         self._running = True
 
         await self.emit_startup()

@@ -6,7 +6,15 @@ from vkworkspace.enums.button_style import ButtonStyle
 
 
 class InlineKeyboardButton:
-    """Single inline keyboard button."""
+    """Single inline keyboard button.
+
+    Args:
+        text: Button label shown to the user.
+        callback_data: Data sent to bot when button is pressed.
+            Handle with ``@router.callback_query()``.
+        url: URL to open when button is pressed (instead of callback).
+        style: Visual style — ``"primary"`` (blue) or ``"attention"`` (red).
+    """
 
     def __init__(
         self,
@@ -32,17 +40,29 @@ class InlineKeyboardButton:
 
 
 class InlineKeyboardBuilder:
-    """
-    Fluent API for building inline keyboards.
+    """Fluent builder for inline keyboards.
 
-    Usage::
+    Chain ``.button()`` calls, then ``.adjust()`` to set row layout,
+    and pass ``.as_markup()`` to ``message.answer()``.
+
+    Example::
 
         builder = InlineKeyboardBuilder()
-        builder.button(text="Option A", callback_data="a")
-        builder.button(text="Option B", callback_data="b")
+        builder.button(text="Yes", callback_data="yes")
+        builder.button(text="No", callback_data="no")
         builder.adjust(2)  # 2 buttons per row
 
-        await message.answer("Choose:", inline_keyboard_markup=builder.as_markup())
+        await message.answer("Confirm?", inline_keyboard_markup=builder.as_markup())
+
+    With URL buttons::
+
+        builder = InlineKeyboardBuilder()
+        builder.button(text="Open docs", url="https://example.com/docs")
+
+    With styles::
+
+        from vkworkspace.enums import ButtonStyle
+        builder.button(text="Delete", callback_data="del", style=ButtonStyle.ATTENTION)
     """
 
     def __init__(self) -> None:
@@ -56,6 +76,14 @@ class InlineKeyboardBuilder:
         url: str | None = None,
         style: str | ButtonStyle = ButtonStyle.PRIMARY,
     ) -> InlineKeyboardBuilder:
+        """Add a button. Returns ``self`` for chaining.
+
+        Args:
+            text: Button label.
+            callback_data: Callback data string (triggers ``callback_query``).
+            url: URL to open (mutually exclusive with *callback_data*).
+            style: ``"primary"`` (blue, default) or ``"attention"`` (red).
+        """
         self._buttons.append(
             InlineKeyboardButton(
                 text=text,
@@ -67,15 +95,24 @@ class InlineKeyboardBuilder:
         return self
 
     def row(self, *buttons: InlineKeyboardButton) -> InlineKeyboardBuilder:
+        """Add a pre-built row of buttons.
+
+        For most cases, use ``.button()`` + ``.adjust()`` instead.
+        """
         self._rows.append(list(buttons))
         return self
 
     def adjust(self, *sizes: int) -> InlineKeyboardBuilder:
-        """
-        Arrange flat buttons into rows.
+        """Arrange flat buttons into rows.
 
-        ``adjust(2)`` -> rows of 2 buttons.
-        ``adjust(1, 2, 1)`` -> first row 1 btn, second row 2, third row 1, repeat.
+        Args:
+            *sizes: Buttons per row. Repeats cyclically.
+
+        Examples::
+
+            builder.adjust(2)           # all rows have 2 buttons
+            builder.adjust(1, 2, 1)     # row1: 1 btn, row2: 2, row3: 1, repeat
+            builder.adjust(3)           # rows of 3
         """
         if not sizes:
             sizes = (1,)
@@ -94,14 +131,17 @@ class InlineKeyboardBuilder:
         return self
 
     def as_markup(self) -> list[list[dict[str, str]]]:
+        """Convert to VK Teams JSON format. Pass to ``inline_keyboard_markup``."""
         if self._buttons:
             self.adjust(1)
         return [[btn.to_dict() for btn in row] for row in self._rows]
 
     def as_json(self) -> str:
+        """Convert to JSON string (for raw API calls)."""
         return json.dumps(self.as_markup(), ensure_ascii=False)
 
     def copy(self) -> InlineKeyboardBuilder:
+        """Create a shallow copy of this builder."""
         new = InlineKeyboardBuilder()
         new._buttons = list(self._buttons)
         new._rows = [list(row) for row in self._rows]

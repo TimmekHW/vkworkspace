@@ -103,6 +103,12 @@ class FilePayload(VKTeamsObject):
 
 
 class Part(VKTeamsObject):
+    """A single part of a message (mention, reply, forward, file, sticker, etc.).
+
+    Use ``.as_mention``, ``.as_reply``, ``.as_forward``, ``.as_file``
+    properties to parse the raw payload into typed objects.
+    """
+
     type: str = ""
     payload: Any = Field(default_factory=dict)
 
@@ -140,6 +146,35 @@ class Part(VKTeamsObject):
 
 
 class Message(VKTeamsObject):
+    """Incoming message from VK Teams.
+
+    This is the main object you work with in ``@router.message()`` handlers.
+
+    Key methods:
+        - ``.answer(text)`` — send a reply to the same chat
+        - ``.reply(text)`` — reply with quote (shows original message)
+        - ``.edit_text(text)`` — edit this message's text
+        - ``.delete()`` — delete this message
+        - ``.pin()`` / ``.unpin()`` — pin/unpin in chat
+        - ``.answer_file(file=...)`` — send a file to the same chat
+        - ``.answer_voice(file=...)`` — send a voice message
+
+    Key properties:
+        - ``.text`` — message text (``None`` if no text)
+        - ``.chat`` — chat where the message was sent
+        - ``.from_user`` — who sent the message
+        - ``.mentions`` — list of @mentions
+        - ``.reply_to`` — original message if this is a reply
+        - ``.forwards`` — list of forwarded messages
+        - ``.files`` — list of file attachments
+
+    Example::
+
+        @router.message(Command("start"))
+        async def start(message: Message):
+            await message.answer("Hello!")
+    """
+
     msg_id: str = Field(default="", alias="msgId")
     chat: Chat = Field(default_factory=lambda: Chat(chatId="", type=""))
     from_user: Contact | None = Field(default=None, alias="from")
@@ -189,6 +224,21 @@ class Message(VKTeamsObject):
         inline_keyboard_markup: Any = None,
         **kwargs: Any,
     ) -> Any:
+        """Send a text message to the same chat.
+
+        If this message is from a thread, the reply stays in the same thread.
+
+        Args:
+            text: Message text.
+            parse_mode: ``"HTML"`` / ``"MarkdownV2"`` / ``None``.
+            inline_keyboard_markup: Inline keyboard.
+            **kwargs: Extra args passed to ``bot.send_text()``.
+
+        Example::
+
+            await message.answer("Got it!")
+            await message.answer("*Bold*", parse_mode="MarkdownV2")
+        """
         if parse_mode is not _UNSET:
             kwargs["parse_mode"] = parse_mode
         if inline_keyboard_markup is not None:
@@ -239,6 +289,17 @@ class Message(VKTeamsObject):
         inline_keyboard_markup: Any = None,
         **kwargs: Any,
     ) -> Any:
+        """Reply with a quote — shows the original message above the response.
+
+        Args:
+            text: Reply text.
+            parse_mode: ``"HTML"`` / ``"MarkdownV2"`` / ``None``.
+            inline_keyboard_markup: Inline keyboard.
+
+        Example::
+
+            await message.reply("I see your message!")
+        """
         if parse_mode is not _UNSET:
             kwargs["parse_mode"] = parse_mode
         if inline_keyboard_markup is not None:
@@ -251,6 +312,7 @@ class Message(VKTeamsObject):
         )
 
     async def delete(self) -> Any:
+        """Delete this message from the chat."""
         return await self.bot.delete_messages(
             chat_id=self.chat.chat_id,
             msg_id=self.msg_id,
@@ -263,6 +325,17 @@ class Message(VKTeamsObject):
         inline_keyboard_markup: Any = None,
         **kwargs: Any,
     ) -> Any:
+        """Edit the text of this message.
+
+        Args:
+            text: New message text.
+            parse_mode: ``"HTML"`` / ``"MarkdownV2"`` / ``None``.
+            inline_keyboard_markup: Updated inline keyboard.
+
+        Example::
+
+            await message.edit_text("Updated text!")
+        """
         if parse_mode is not _UNSET:
             kwargs["parse_mode"] = parse_mode
         if inline_keyboard_markup is not None:
@@ -275,12 +348,14 @@ class Message(VKTeamsObject):
         )
 
     async def pin(self) -> Any:
+        """Pin this message in the chat."""
         return await self.bot.pin_message(
             chat_id=self.chat.chat_id,
             msg_id=self.msg_id,
         )
 
     async def unpin(self) -> Any:
+        """Unpin this message from the chat."""
         return await self.bot.unpin_message(
             chat_id=self.chat.chat_id,
             msg_id=self.msg_id,
@@ -295,6 +370,17 @@ class Message(VKTeamsObject):
         inline_keyboard_markup: Any = None,
         **kwargs: Any,
     ) -> Any:
+        """Send a file/image to the same chat.
+
+        Args:
+            file_id: ID of a previously uploaded file (no re-upload).
+            file: ``InputFile`` or open ``BinaryIO`` to upload.
+            caption: Text caption below the file.
+
+        Example::
+
+            await message.answer_file(file=InputFile("report.pdf"), caption="Here!")
+        """
         if parse_mode is not _UNSET:
             kwargs["parse_mode"] = parse_mode
         if inline_keyboard_markup is not None:
@@ -314,6 +400,20 @@ class Message(VKTeamsObject):
         inline_keyboard_markup: Any = None,
         **kwargs: Any,
     ) -> Any:
+        """Send a voice message to the same chat.
+
+        Recommended format: OGG/Opus. Convert with
+        ``vkworkspace.utils.voice.convert_to_ogg_opus()`` if needed.
+
+        Args:
+            file_id: ID of a previously uploaded voice.
+            file: ``InputFile`` with OGG/Opus data.
+
+        Example::
+
+            ogg = convert_to_ogg_opus("audio.mp3")
+            await message.answer_voice(file=InputFile(ogg, filename="voice.ogg"))
+        """
         if inline_keyboard_markup is not None:
             kwargs["inline_keyboard_markup"] = inline_keyboard_markup
         return await self.bot.send_voice(
