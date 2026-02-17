@@ -116,7 +116,7 @@ class TestChatActionSender:
     @pytest.mark.asyncio
     async def test_sends_typing_in_context(self):
         bot = SimpleNamespace(send_actions=AsyncMock())
-        async with ChatActionSender(bot=bot, chat_id="c1"):
+        async with ChatActionSender(bot=bot, chat_id="c1"):  # type: ignore[arg-type]
             await asyncio.sleep(0.05)
         bot.send_actions.assert_called_with("c1", "typing")
 
@@ -124,7 +124,7 @@ class TestChatActionSender:
     async def test_custom_action(self):
         bot = SimpleNamespace(send_actions=AsyncMock())
         async with ChatActionSender(
-            bot=bot, chat_id="c1", action=ChatAction.LOOKING,
+            bot=bot, chat_id="c1", action=ChatAction.LOOKING,  # type: ignore[arg-type]
         ):
             await asyncio.sleep(0.05)
         bot.send_actions.assert_called_with("c1", "looking")
@@ -132,7 +132,7 @@ class TestChatActionSender:
     @pytest.mark.asyncio
     async def test_stops_after_exit(self):
         bot = SimpleNamespace(send_actions=AsyncMock())
-        async with ChatActionSender(bot=bot, chat_id="c1", interval=0.01):
+        async with ChatActionSender(bot=bot, chat_id="c1", interval=0.01):  # type: ignore[arg-type]
             await asyncio.sleep(0.05)
         await asyncio.sleep(0.02)
         count = bot.send_actions.call_count
@@ -143,7 +143,7 @@ class TestChatActionSender:
     async def test_stops_on_exception(self):
         bot = SimpleNamespace(send_actions=AsyncMock())
         with pytest.raises(ValueError, match="boom"):
-            async with ChatActionSender(bot=bot, chat_id="c1", interval=0.01):
+            async with ChatActionSender(bot=bot, chat_id="c1", interval=0.01):  # type: ignore[arg-type]
                 await asyncio.sleep(0.03)
                 raise ValueError("boom")
         await asyncio.sleep(0.05)
@@ -154,14 +154,14 @@ class TestChatActionSender:
     @pytest.mark.asyncio
     async def test_typing_classmethod(self):
         bot = SimpleNamespace(send_actions=AsyncMock())
-        async with ChatActionSender.typing(bot=bot, chat_id="c1"):
+        async with ChatActionSender.typing(bot=bot, chat_id="c1"):  # type: ignore[arg-type]
             await asyncio.sleep(0.05)
         bot.send_actions.assert_called_with("c1", "typing")
 
     @pytest.mark.asyncio
     async def test_looking_classmethod(self):
         bot = SimpleNamespace(send_actions=AsyncMock())
-        async with ChatActionSender.looking(bot=bot, chat_id="c1"):
+        async with ChatActionSender.looking(bot=bot, chat_id="c1"):  # type: ignore[arg-type]
             await asyncio.sleep(0.05)
         bot.send_actions.assert_called_with("c1", "looking")
 
@@ -169,7 +169,7 @@ class TestChatActionSender:
     async def test_reentrant(self):
         """Can be used multiple times."""
         bot = SimpleNamespace(send_actions=AsyncMock())
-        sender = ChatActionSender(bot=bot, chat_id="c1")
+        sender = ChatActionSender(bot=bot, chat_id="c1")  # type: ignore[arg-type]
         async with sender:
             await asyncio.sleep(0.02)
         bot.send_actions.reset_mock()
@@ -184,8 +184,8 @@ class TestMessageTyping:
         from vkworkspace.types.message import Message
 
         bot = SimpleNamespace(send_actions=AsyncMock())
-        msg = Message(msgId="1", chat={"chatId": "chat-1", "type": "group"})
-        msg.set_bot(bot)
+        msg = Message(msgId="1", chat={"chatId": "chat-1", "type": "group"})  # type: ignore[arg-type]
+        msg.set_bot(bot)  # type: ignore[arg-type]
 
         async with msg.typing():
             await asyncio.sleep(0.05)
@@ -196,8 +196,8 @@ class TestMessageTyping:
         from vkworkspace.types.message import Message
 
         bot = SimpleNamespace(send_actions=AsyncMock())
-        msg = Message(msgId="1", chat={"chatId": "c1", "type": "private"})
-        msg.set_bot(bot)
+        msg = Message(msgId="1", chat={"chatId": "c1", "type": "private"})  # type: ignore[arg-type]
+        msg.set_bot(bot)  # type: ignore[arg-type]
 
         async with msg.typing(action=ChatAction.LOOKING):
             await asyncio.sleep(0.05)
@@ -208,8 +208,8 @@ class TestMessageTyping:
         from vkworkspace.types.message import Message
 
         bot = SimpleNamespace(send_actions=AsyncMock())
-        msg = Message(msgId="1", chat={"chatId": "chat-1", "type": "group"})
-        msg.set_bot(bot)
+        msg = Message(msgId="1", chat={"chatId": "chat-1", "type": "group"})  # type: ignore[arg-type]
+        msg.set_bot(bot)  # type: ignore[arg-type]
 
         await msg.answer_chat_action()
         bot.send_actions.assert_called_once_with("chat-1", "typing")
@@ -219,8 +219,8 @@ class TestMessageTyping:
         from vkworkspace.types.message import Message
 
         bot = SimpleNamespace(send_actions=AsyncMock())
-        msg = Message(msgId="1", chat={"chatId": "c1", "type": "private"})
-        msg.set_bot(bot)
+        msg = Message(msgId="1", chat={"chatId": "c1", "type": "private"})  # type: ignore[arg-type]
+        msg.set_bot(bot)  # type: ignore[arg-type]
 
         await msg.answer_chat_action(action=ChatAction.LOOKING)
         bot.send_actions.assert_called_once_with("c1", "looking")

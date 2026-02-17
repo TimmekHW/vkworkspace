@@ -54,7 +54,7 @@ class InputFile:
         self.file = file
         self.filename = filename
 
-    def read(self) -> tuple[str | None, BinaryIO | bytes]:
+    def read(self) -> tuple[str | None, BinaryIO]:
         """Open the file and return ``(filename, file_object)``.
 
         Called internally by ``Bot._file_payload()``. You normally don't

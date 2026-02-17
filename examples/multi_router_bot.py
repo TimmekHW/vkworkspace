@@ -86,6 +86,7 @@ async def on_urgent_forward(message: Message) -> None:
 
 @user_router.message(F.text)
 async def echo(message: Message) -> None:
+    assert message.text is not None
     await message.answer(message.text)
 
 

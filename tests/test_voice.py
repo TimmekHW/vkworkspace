@@ -8,7 +8,7 @@ from vkworkspace.utils.voice import convert_to_ogg_opus
 
 _has_av = False
 try:
-    import av  # noqa: F401
+    import av  # type: ignore[import-not-found]  # noqa: F401
 
     _has_av = True
 except ImportError:

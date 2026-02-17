@@ -830,6 +830,7 @@ class TestHelpers:
     def test_keyboard_json_list(self):
         kb = [[{"text": "btn", "callbackData": "d"}]]
         result = Bot._keyboard_json(kb)
+        assert result is not None
         assert json.loads(result) == kb
 
     def test_parent_topic_json_none(self):
@@ -838,6 +839,7 @@ class TestHelpers:
     def test_parent_topic_json_dict(self):
         pt = {"chatId": "c1", "messageId": 1, "type": "thread"}
         result = Bot._parent_topic_json(pt)
+        assert result is not None
         assert json.loads(result) == pt
 
     def test_format_json_none(self):
@@ -846,6 +848,7 @@ class TestHelpers:
     def test_format_json_dict(self):
         fmt = {"bold": [{"offset": 0, "length": 3}]}
         result = Bot._format_json(fmt)
+        assert result is not None
         assert json.loads(result) == fmt
 
     def test_format_json_string(self):

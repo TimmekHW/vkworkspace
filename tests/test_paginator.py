@@ -83,6 +83,7 @@ class TestNavButtons:
     def test_prev_button_callback(self):
         p = Paginator(data=list(range(15)), per_page=5, current_page=1, name="test")
         buttons = p.nav_buttons()
+        assert buttons[0].callback_data is not None
         prev_cb = PaginationCB.unpack(buttons[0].callback_data)
         assert prev_cb.name == "test"
         assert prev_cb.page == 0
@@ -90,6 +91,7 @@ class TestNavButtons:
     def test_next_button_callback(self):
         p = Paginator(data=list(range(15)), per_page=5, current_page=1, name="test")
         buttons = p.nav_buttons()
+        assert buttons[2].callback_data is not None
         next_cb = PaginationCB.unpack(buttons[2].callback_data)
         assert next_cb.name == "test"
         assert next_cb.page == 2
@@ -97,6 +99,7 @@ class TestNavButtons:
     def test_counter_button_callback(self):
         p = Paginator(data=list(range(15)), per_page=5, current_page=1, name="x")
         buttons = p.nav_buttons()
+        assert buttons[1].callback_data is not None
         counter_cb = PaginationCB.unpack(buttons[1].callback_data)
         assert counter_cb.page == 1  # same page (no-op)
 
