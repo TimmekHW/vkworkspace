@@ -10,6 +10,31 @@ A modern replacement for the official [mail-ru-im/bot-python](https://github.com
 
 > **[README на русском языке](https://github.com/TimmekHW/vkworkspace/blob/main/README_RU.md)**
 
+## Table of Contents
+
+- [vkworkspace vs mailru-im-bot](#vkworkspace-vs-mailru-im-bot)
+- [Why async?](#why-async)
+- [Features](#features)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Bot Configuration](#bot-configuration)
+- [Dispatcher](#dispatcher)
+- [Router & Event Types](#router--event-types)
+- [Filters](#filters)
+- [Text Formatting](#text-formatting)
+- [Inline Keyboards](#inline-keyboards)
+- [FSM (Finite State Machine)](#fsm-finite-state-machine)
+- [Custom Middleware](#custom-middleware)
+- [Message Methods](#message-methods)
+- [Bot API Methods](#bot-api-methods)
+- [Handler Dependency Injection](#handler-dependency-injection)
+- [Mini-Apps + Bots](#mini-apps--bots)
+- [Testing](#testing)
+- [Examples](#examples)
+- [Project Structure](#project-structure)
+- [Requirements](#requirements)
+- [License](#license)
+
 ## vkworkspace vs mailru-im-bot
 
 The official [mailru-im-bot](https://github.com/mail-ru-im/bot-python) library is synchronous, based on `requests`, and has not been updated in years. **vkworkspace** is a ground-up async rewrite with a modern developer experience.

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- ReDoS mitigation: regex filters now limit input text to 8192 chars (`RegexpFilter`, `RegexpPartsFilter`)
+- Path traversal mitigation: `InputFile.read()` resolves path via `.resolve()` and validates `.is_file()` before opening
+- Admin check in `multi_router_bot.py` moved to router-level `AdminFilter` (was inline in handler)
+- Added `assert message.text is not None` in examples for type safety with `F.text` filter
+
+### Added
+- Table of contents in README and README_RU
+
 ## [1.4.0] - 2026-02-17
 
 ### Added
