@@ -82,6 +82,8 @@ class Bot:
         rate_limit: float | None = None,
         proxy: str | None = None,
         parse_mode: ParseMode | str | None = None,
+        retry_on_5xx: int | None = 3,
+        verify_ssl: bool = True,
     ) -> None:
         self.token = token
         self.api_url = api_url.rstrip("/")
@@ -90,6 +92,8 @@ class Bot:
         self.rate_limit = rate_limit
         self.proxy = proxy
         self.parse_mode = parse_mode
+        self.retry_on_5xx = retry_on_5xx
+        self.verify_ssl = verify_ssl
         self._rate_limiter: RateLimiter | None = (
             RateLimiter(rate_limit) if rate_limit else None
         )
@@ -105,6 +109,7 @@ class Bot:
                 ),
                 follow_redirects=True,
                 proxy=self.proxy,
+                verify=self.verify_ssl,
             )
         return self._session
 
@@ -139,21 +144,37 @@ class Bot:
         session = await self.get_session()
         url = f"{self.api_url}/{endpoint}"
 
-        if files:
-            resp = await session.post(url, data=params, files=files)
-        else:
-            resp = await session.post(url, data=params)
+        max_attempts = (self.retry_on_5xx or 0) + 1
+        last_exc: Exception | None = None
 
-        resp.raise_for_status()
-        data: dict[str, Any] = resp.json()
+        for attempt in range(max_attempts):
+            try:
+                if files:
+                    resp = await session.post(url, data=params, files=files)
+                else:
+                    resp = await session.post(url, data=params)
 
-        if data.get("ok") is False:
-            raise VKTeamsAPIError(
-                method=endpoint,
-                message=data.get("description", "Unknown error"),
-            )
+                resp.raise_for_status()
+                data: dict[str, Any] = resp.json()
 
-        return data
+                if data.get("ok") is False:
+                    raise VKTeamsAPIError(
+                        method=endpoint,
+                        message=data.get("description", "Unknown error"),
+                    )
+                return data
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code < 500 or attempt >= max_attempts - 1:
+                    raise
+                last_exc = exc
+                delay = min(2 ** attempt, 8)
+                logger.warning(
+                    "5xx from %s (attempt %d/%d), retrying in %ds...",
+                    endpoint, attempt + 1, max_attempts, delay,
+                )
+                await asyncio.sleep(delay)
+
+        raise last_exc  # type: ignore[misc]
 
     def _resolve_parse_mode(self, parse_mode: Any) -> str | None:
         """Return explicit value or fall back to ``self.parse_mode``."""
@@ -242,14 +263,29 @@ class Bot:
         last_event_id: int | None = None,
         poll_time: int | None = None,
     ) -> list[Update]:
-        """Long-poll for events. ``events/get``"""
+        """Long-poll for events. ``events/get``
+
+        504 Gateway Timeout is expected when the server-side reverse proxy
+        times out before ``poll_time`` elapses.  We silently return an empty
+        list so the polling loop retries immediately instead of logging a
+        traceback on a routine situation.
+        """
         eid = last_event_id if last_event_id is not None else self._last_event_id
         pt = poll_time if poll_time is not None else self.poll_time
 
-        data = await self._request(
-            "events/get",
-            self._params(pollTime=pt, lastEventId=eid),
-        )
+        try:
+            data = await self._request(
+                "events/get",
+                self._params(pollTime=pt, lastEventId=eid),
+            )
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code >= 500:
+                logger.debug(
+                    "Long-poll returned %s, reconnecting...",
+                    exc.response.status_code,
+                )
+                return []
+            raise
 
         events: list[Update] = []
         for raw in data.get("events", []):

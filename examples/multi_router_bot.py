@@ -9,7 +9,13 @@ Usage:
 import asyncio
 
 from vkworkspace import Bot, Dispatcher, F, Router
-from vkworkspace.filters import ChatTypeFilter, Command
+from vkworkspace.filters import (
+    ChatTypeFilter,
+    Command,
+    ForwardFilter,
+    RegexpPartsFilter,
+    ReplyFilter,
+)
 from vkworkspace.types import Message
 
 # ── Admin router ──────────────────────────────────────────────────────
@@ -51,6 +57,21 @@ async def cmd_start(message: Message) -> None:
 @user_router.message(Command("dm"), ChatTypeFilter("private"))
 async def cmd_private(message: Message) -> None:
     await message.answer("This is a private conversation.")
+
+
+@user_router.message(ReplyFilter())
+async def on_reply(message: Message) -> None:
+    await message.answer("You replied to a message!")
+
+
+@user_router.message(ForwardFilter())
+async def on_forward(message: Message) -> None:
+    await message.answer("You forwarded a message!")
+
+
+@user_router.message(RegexpPartsFilter(r"urgent|asap"))
+async def on_urgent_forward(message: Message) -> None:
+    await message.answer("Forwarded/replied message contains urgent text!")
 
 
 @user_router.message(F.text)

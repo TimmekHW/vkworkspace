@@ -1,3 +1,4 @@
+from .format_builder import FormatBuilder
 from .keyboard import InlineKeyboardBuilder, InlineKeyboardButton
 from .text import (
     Bold,
@@ -19,6 +20,7 @@ from .text import (
 __all__ = [
     "Bold",
     "Code",
+    "FormatBuilder",
     "InlineKeyboardBuilder",
     "InlineKeyboardButton",
     "Italic",

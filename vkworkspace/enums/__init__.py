@@ -7,11 +7,11 @@ from .part_type import PartType
 from .style_type import StyleType
 
 __all__ = [
-    "EventType",
-    "ChatType",
-    "ChatAction",
-    "ParseMode",
     "ButtonStyle",
+    "ChatAction",
+    "ChatType",
+    "EventType",
+    "ParseMode",
     "PartType",
     "StyleType",
 ]

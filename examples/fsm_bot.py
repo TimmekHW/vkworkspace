@@ -89,10 +89,13 @@ async def main() -> None:
         token="YOUR_BOT_TOKEN",
         api_url="https://myteam.mail.ru/bot/v1",
     )
-    dp = Dispatcher(storage=MemoryStorage())
+    dp = Dispatcher(
+        storage=MemoryStorage(),
+        session_timeout=300,  # Auto-clear FSM after 5 min of inactivity
+    )
     dp.include_router(router)
 
-    print("FSM bot is running...")
+    print("FSM bot is running (session_timeout=300s)...")
     await dp.start_polling(bot)
 
 

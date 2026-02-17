@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import logging
 import signal
+import time
 from typing import Any
 
 from ..enums.event_type import EventType
@@ -50,6 +51,7 @@ class Dispatcher(Router):
         fsm_strategy: str = "user_in_chat",
         name: str | None = None,
         handle_edited_as_message: bool = False,
+        session_timeout: float | None = None,
     ) -> None:
         super().__init__(name=name or "Dispatcher")
 
@@ -62,7 +64,9 @@ class Dispatcher(Router):
         self.storage = storage
         self.fsm_strategy = fsm_strategy
         self.handle_edited_as_message = handle_edited_as_message
+        self.session_timeout = session_timeout
         self._running = False
+        self._fsm_timestamps: dict[Any, float] = {}
 
     def _resolve_event(
         self, update: Update, bot: Any
@@ -127,6 +131,7 @@ class Dispatcher(Router):
         chat_id = getattr(chat, "chat_id", "") if chat else ""
         user_id = getattr(from_user, "user_id", "") if from_user else ""
 
+        key: StorageKey | None = None
         if chat_id or user_id:
             key = StorageKey(
                 bot_id=bot.token[:16],
@@ -135,6 +140,18 @@ class Dispatcher(Router):
             )
             fsm_context = FSMContext(storage=self.storage, key=key)
             current_state = await fsm_context.get_state()
+
+            # Session timeout: clear expired FSM sessions
+            if (
+                current_state is not None
+                and self.session_timeout is not None
+                and key in self._fsm_timestamps
+                and time.monotonic() - self._fsm_timestamps[key] > self.session_timeout
+            ):
+                await fsm_context.clear()
+                del self._fsm_timestamps[key]
+                current_state = None
+
             extra["state"] = fsm_context
             extra["current_state"] = current_state
         else:
@@ -142,7 +159,7 @@ class Dispatcher(Router):
             extra["current_state"] = None
 
         try:
-            return await self.propagate_event(
+            result = await self.propagate_event(
                 update_type=update_type,
                 event=event,
                 **extra,
@@ -150,13 +167,23 @@ class Dispatcher(Router):
         except Exception as e:
             logger.exception("Error processing update: %s", e)
             try:
-                return await self.propagate_event(
+                result = await self.propagate_event(
                     update_type="error",
                     event=e,
                     **extra,
                 )
             except Exception:
                 return UNHANDLED
+
+        # Update FSM session timestamp after handler
+        if key is not None and self.session_timeout is not None:
+            new_state = await self.storage.get_state(key=key)
+            if new_state is not None:
+                self._fsm_timestamps[key] = time.monotonic()
+            elif key in self._fsm_timestamps:
+                del self._fsm_timestamps[key]
+
+        return result
 
     async def _polling(self, bot: Any) -> None:
         logger.info("Polling started")

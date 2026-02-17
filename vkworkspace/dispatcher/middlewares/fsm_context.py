@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -14,9 +15,12 @@ class FSMContextMiddleware(BaseMiddleware):
         self,
         storage: BaseStorage,
         strategy: FSMStrategy = FSMStrategy.USER_IN_CHAT,
+        session_timeout: float | None = None,
     ) -> None:
         self.storage = storage
         self.strategy = strategy
+        self.session_timeout = session_timeout
+        self._timestamps: dict[StorageKey, float] = {}
 
     def _build_key(self, event: Any, data: dict[str, Any]) -> StorageKey | None:
         bot = data.get("bot")
@@ -51,10 +55,30 @@ class FSMContextMiddleware(BaseMiddleware):
         if key is not None:
             fsm_context = FSMContext(storage=self.storage, key=key)
             current_state = await fsm_context.get_state()
+
+            if (
+                current_state is not None
+                and self.session_timeout is not None
+                and key in self._timestamps
+                and time.monotonic() - self._timestamps[key] > self.session_timeout
+            ):
+                await fsm_context.clear()
+                del self._timestamps[key]
+                current_state = None
+
             data["state"] = fsm_context
             data["current_state"] = current_state
         else:
             data["state"] = None
             data["current_state"] = None
 
-        return await handler(event, data)
+        result = await handler(event, data)
+
+        if key is not None and self.session_timeout is not None:
+            new_state = await self.storage.get_state(key=key)
+            if new_state is not None:
+                self._timestamps[key] = time.monotonic()
+            elif key in self._timestamps:
+                del self._timestamps[key]
+
+        return result

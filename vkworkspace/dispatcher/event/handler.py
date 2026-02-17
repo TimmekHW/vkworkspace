@@ -27,7 +27,8 @@ class FilterObject:
         # BaseFilter or async callable
         if callable(cb):
             if inspect.iscoroutinefunction(cb.__call__) or inspect.iscoroutinefunction(cb):
-                return cast(bool | dict[str, Any], await cb(event, **kwargs))
+                result = cb(event, **kwargs)
+                return cast(bool | dict[str, Any], await result)  # type: ignore[reportGeneralTypeIssues]
             return cast(bool | dict[str, Any], cb(event, **kwargs))
 
         return bool(cb)

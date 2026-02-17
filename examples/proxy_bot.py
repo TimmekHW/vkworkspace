@@ -1,5 +1,6 @@
 """
-Proxy & rate-limited bot — demonstrates corporate proxy and rate limiting.
+Proxy & rate-limited bot — demonstrates corporate proxy, rate limiting,
+retry on 5xx errors, and SSL verification control.
 
 Usage:
     python examples/proxy_bot.py
@@ -46,12 +47,14 @@ async def main() -> None:
         rate_limit=5,                          # Max 5 requests/sec
         proxy="http://corp-proxy.local:3128",  # Corporate HTTP proxy
         timeout=30.0,                          # Request timeout
+        retry_on_5xx=3,                        # Retry up to 3 times on 5xx errors
+        verify_ssl=False,                      # Disable SSL for self-signed certs
     )
 
     dp = Dispatcher()
     dp.include_router(router)
 
-    print("Proxy bot is running (rate_limit=5, proxy=corp-proxy)...")
+    print("Proxy bot is running (rate_limit=5, proxy, retry_on_5xx=3, verify_ssl=False)...")
     await dp.start_polling(bot)
 
 

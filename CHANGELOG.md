@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-02-17
+
+### Added
+- `retry_on_5xx` parameter in `Bot()` — automatic retry with exponential backoff on 5xx errors (default: 3 retries)
+- `verify_ssl` parameter in `Bot()` — disable SSL verification for self-signed certificates
+- `session_timeout` parameter in `Dispatcher()` and `FSMContextMiddleware` — auto-clear expired FSM sessions
+- `ReplyFilter`, `ForwardFilter`, `RegexpPartsFilter` — new filters for reply/forward/regex-in-parts matching
+- `FormatBuilder` — programmatic builder for offset/length text formatting (`format_=` parameter)
+- FSM session timeout tests (`tests/test_fsm_timeout.py`)
+- 504 Gateway Timeout handling in `get_events()` — silent reconnect instead of traceback
+
+### Changed
+- Ruff rules expanded: added `C901` (cyclomatic complexity ≤ 12), `PERF`, `RUF`
+- Replaced mypy with pyright for stricter type checking
+- All CI workflows now use `uv` (astral-sh/setup-uv) for faster dependency installation
+- Release workflow builds with `uvx --from build` instead of pip
+
 ## [1.3.0] - 2026-02-17
 
 ### Added
@@ -97,6 +114,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Inline keyboard builder utility
 - 10 example bots (echo, keyboard, FSM, middleware, proxy, diagnostic, API tester, etc.)
 
+[1.4.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.2.2...v1.3.0
 [1.2.2]: https://github.com/TimmekHW/vkworkspace/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/TimmekHW/vkworkspace/compare/v1.2.0...v1.2.1

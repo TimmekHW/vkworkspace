@@ -26,6 +26,8 @@
 | **Middleware** | — | inner/outer, per-event |
 | **Конструктор клавиатур** | — | `InlineKeyboardBuilder` |
 | **Rate limiter** | — | встроенный token-bucket |
+| **Ретрай при 5xx** | — | экспоненциальный backoff |
+| **Управление SSL** | — | `verify_ssl=False` |
 | **Прокси** | — | параметр `proxy=` |
 | **Инъекция зависимостей** | — | авто-инжект `bot`, `state`, `command` |
 | **Кастомные префиксы** | — | `prefix=("/", "!", "")` |
@@ -64,13 +66,16 @@ Framework overhead — **НОЛЬ** в реальных условиях. Сет
 - **100% async** — `httpx` + `asyncio`, ноль блокирующих вызовов, реальная конкурентность
 - **API как в aiogram** — `Router`, `Dispatcher`, магический фильтр `F`, middleware, FSM
 - **Типобезопасность** — Pydantic v2 модели для всех типов API, полные type hints
-- **Гибкая фильтрация** — `Command`, `StateFilter`, `ChatTypeFilter`, `CallbackData`, regex, магические фильтры
+- **Гибкая фильтрация** — `Command`, `StateFilter`, `ChatTypeFilter`, `CallbackData`, `ReplyFilter`, `ForwardFilter`, regex, магические фильтры
 - **Кастомные префиксы команд** — `Command("start", prefix=("/", "!", ""))` для любого стиля
 - **FSM** — конечный автомат состояний с бэкендами Memory и Redis
 - **Middleware** — пайплайн inner/outer для логирования, авторизации, троттлинга
-- **Форматирование текста** — хелперы `md`, `html` для MarkdownV2/HTML + `split_text` для длинных сообщений
+- **Форматирование текста** — хелперы `md`, `html` для MarkdownV2/HTML + `FormatBuilder` для offset/length + `split_text` для длинных сообщений
 - **Конструктор клавиатур** — fluent API для inline-клавиатур со стилями кнопок
 - **Rate limiter** — встроенный ограничитель запросов (`rate_limit=5` = макс. 5 запросов/сек)
+- **Ретрай при 5xx** — автоматический ретрай с экспоненциальным backoff при серверных ошибках
+- **Управление SSL** — отключение проверки SSL для on-premise с самоподписанными сертификатами
+- **Таймаут FSM-сессий** — автоочистка брошенных FSM-форм после настраиваемого периода неактивности
 - **Прокси** — маршрутизация API-запросов через корпоративный прокси
 - **Роутинг отредактированных сообщений** — `handle_edited_as_message=True` для обработки правок как новых сообщений
 - **Хуки жизненного цикла** — `on_startup` / `on_shutdown` для инициализации и очистки
@@ -135,6 +140,8 @@ bot = Bot(
     rate_limit=5.0,             # Макс 5 запросов/сек (None = без ограничений)
     proxy="http://proxy:8080",  # HTTP-прокси для корпоративных сетей
     parse_mode="HTML",          # Режим парсинга по умолчанию (None = обычный текст)
+    retry_on_5xx=3,             # Ретрай до 3 раз при 5xx ошибках (None = отключено)
+    verify_ssl=True,            # False для самоподписанных сертификатов (on-premise)
 )
 ```
 
@@ -157,6 +164,23 @@ bot = Bot(
     api_url="https://api.internal.corp/bot/v1",
     proxy="http://corp-proxy.internal:3128",
 )
+```
+
+### Ретрай при 5xx ошибках
+
+Автоматический ретрай с экспоненциальным backoff (1с, 2с, 4с, макс 8с) при серверных ошибках:
+
+```python
+bot = Bot(token="TOKEN", api_url="URL", retry_on_5xx=3)    # 3 ретрая (по умолчанию)
+bot = Bot(token="TOKEN", api_url="URL", retry_on_5xx=None)  # Отключено
+```
+
+### SSL-верификация
+
+На on-premise инсталляциях с самоподписанными сертификатами можно отключить проверку SSL:
+
+```python
+bot = Bot(token="TOKEN", api_url="https://internal.corp/bot/v1", verify_ssl=False)
 ```
 
 ### Режим парсинга по умолчанию
@@ -314,7 +338,10 @@ from vkworkspace.filters.state import StateFilter
 ### Другие фильтры
 
 ```python
-from vkworkspace.filters import CallbackData, ChatTypeFilter, RegexpFilter
+from vkworkspace.filters import (
+    CallbackData, ChatTypeFilter, RegexpFilter,
+    ReplyFilter, ForwardFilter, RegexpPartsFilter,
+)
 
 # Callback data
 @router.callback_query(CallbackData("confirm"))
@@ -326,6 +353,15 @@ from vkworkspace.filters import CallbackData, ChatTypeFilter, RegexpFilter
 
 # Regex по тексту сообщения
 @router.message(RegexpFilter(r"\d{4}"))
+
+# Детекция ответов и пересылок
+@router.message(ReplyFilter())       # Сообщение является ответом
+@router.message(ForwardFilter())     # Сообщение содержит пересылки
+
+# Regex по тексту внутри ответов/пересылок
+@router.message(RegexpPartsFilter(r"срочно|asap"))
+async def on_urgent(message: Message, regexp_parts_match) -> None:
+    await message.answer("В пересланном сообщении найден срочный текст!")
 
 # Комбинирование фильтров через &, |, ~
 @router.message(ChatTypeFilter("private") & Command("secret"))
@@ -424,6 +460,30 @@ await message.answer(**content.as_kwargs("MarkdownV2"))
 
 > **Внимание:** Не смешивайте строковые хелперы (`md.*` / `html.*`) с нодами — строки внутри нод автоэкранируются, поэтому `Text(md.bold("x"))` выдаст литеральный `*x*`, а не жирный. Используйте `Bold("x")`.
 
+### Format Builder (offset/length)
+
+VK Teams также поддерживает форматирование через параметр `format` — JSON-словарь с диапазонами offset/length вместо разметки. `FormatBuilder` упрощает его создание:
+
+```python
+from vkworkspace.utils import FormatBuilder
+
+# По offset/length
+fb = FormatBuilder("Привет, Мир! Нажми сюда.")
+fb.bold(0, 6)                               # "Привет" жирным
+fb.italic(8, 3)                              # "Мир" курсивом
+fb.link(13, 10, url="https://example.com")   # "Нажми сюда" как ссылка
+await bot.send_text(chat_id, fb.text, format_=fb.build())
+
+# По подстроке (offset находится автоматически)
+fb = FormatBuilder("Заказ #42 готов! Откройте https://shop.com")
+fb.bold_text("Заказ #42")
+fb.italic_text("готов")
+fb.link_text("https://shop.com", url="https://shop.com")
+await bot.send_text(chat_id, fb.text, format_=fb.build())
+```
+
+Поддерживаемые стили: `bold`, `italic`, `underline`, `strikethrough`, `link`, `mention`, `inline_code`, `pre`, `ordered_list`, `unordered_list`, `quote`. Все методы поддерживают цепочки вызовов.
+
 ## Inline-клавиатуры
 
 ```python
@@ -491,6 +551,21 @@ dp = Dispatcher(storage=RedisStorage())           # Redis (для продакш
 - `await state.update_data(key=value)` — добавить/обновить данные
 - `await state.set_data({...})` — заменить все данные
 - `await state.clear()` — очистить состояние и данные
+
+### Таймаут FSM-сессий
+
+Защита от "зависших" пользователей в незавершённых формах. При включении middleware автоматически очищает протухшие FSM-сессии:
+
+```python
+dp = Dispatcher(
+    storage=MemoryStorage(),
+    session_timeout=300,  # 5 минут — очищать FSM при неактивности
+)
+```
+
+Если пользователь начал заполнять форму и не завершил её за 5 минут, следующее сообщение очистит состояние и пройдёт как обычное — больше никаких "Введите возраст" через 3 дня тишины.
+
+По умолчанию отключено (`session_timeout=None`).
 
 ## Middleware (промежуточное ПО)
 
@@ -638,13 +713,13 @@ await message.answer(
 |--------|----------|
 | [echo_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/echo_bot.py) | Базовые команды + эхо-бот |
 | [keyboard_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/keyboard_bot.py) | Inline-клавиатуры + обработка callback |
-| [fsm_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/fsm_bot.py) | Многошаговый диалог с FSM |
+| [fsm_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/fsm_bot.py) | Многошаговый диалог с FSM + таймаут сессий |
 | [middleware_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/middleware_bot.py) | Middleware (логирование, контроль доступа) |
-| [proxy_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/proxy_bot.py) | Корпоративный прокси + rate limiter |
+| [proxy_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/proxy_bot.py) | Корпоративный прокси + rate limiter + ретрай 5xx + SSL |
 | [error_handling_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/error_handling_bot.py) | Обработка ошибок, хуки жизненного цикла, роутинг правок |
 | [custom_prefix_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/custom_prefix_bot.py) | Кастомные префиксы команд, regex, парсинг аргументов |
-| [multi_router_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/multi_router_bot.py) | Модульные подроутеры, события чата (вход/выход/закреп) |
-| [formatting_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/formatting_bot.py) | Форматирование MarkdownV2/HTML + split_text для длинных сообщений |
+| [multi_router_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/multi_router_bot.py) | Подроутеры, события чата, ReplyFilter, ForwardFilter |
+| [formatting_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/formatting_bot.py) | MarkdownV2/HTML + Text builder + FormatBuilder |
 | [event_logger_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/event_logger_bot.py) | Логирует все 9 типов событий в JSONL-файл |
 
 ## Тестирование
@@ -658,7 +733,7 @@ pip install -e ".[dev]"
 pytest tests/test_bot_api.py -v
 ```
 
-93 теста покрывают все методы Bot API с моком HTTP-транспорта — реальных запросов к API не делается.
+98 тестов покрывают все методы Bot API и FSM с моком HTTP-транспорта — реальных запросов к API не делается.
 
 ### Live-тесты (боевой API)
 

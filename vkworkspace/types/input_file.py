@@ -17,7 +17,7 @@ class InputFile:
     def read(self) -> tuple[str | None, BinaryIO | bytes]:
         if isinstance(self.file, (str, Path)):
             path = Path(self.file)
-            return self.filename or path.name, open(path, "rb")  # noqa: SIM115
+            return self.filename or path.name, open(path, "rb")
         if isinstance(self.file, bytes):
             return self.filename, BytesIO(self.file)
         return self.filename, self.file

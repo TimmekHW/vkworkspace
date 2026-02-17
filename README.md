@@ -26,6 +26,8 @@ The official [mailru-im-bot](https://github.com/mail-ru-im/bot-python) library i
 | **Middleware pipeline** | — | inner/outer, per-event type |
 | **Inline keyboard builder** | — | `InlineKeyboardBuilder` |
 | **Rate limiter** | — | built-in token-bucket |
+| **Retry on 5xx** | — | exponential backoff |
+| **SSL control** | — | `verify_ssl=False` |
 | **Proxy support** | — | `proxy=` parameter |
 | **Handler DI** | — | auto-inject `bot`, `state`, `command` |
 | **Custom command prefixes** | — | `prefix=("/", "!", "")` |
@@ -64,13 +66,16 @@ VK Teams bots spend 99% of their time waiting for the network. Synchronous frame
 - **100% async** — `httpx` + `asyncio`, zero blocking calls, real concurrency
 - **Aiogram-like API** — `Router`, `Dispatcher`, `F` magic filters, middleware, FSM
 - **Type-safe** — Pydantic v2 models for all API types, full type hints
-- **Flexible filtering** — `Command`, `StateFilter`, `ChatTypeFilter`, `CallbackData`, regex, magic filters
+- **Flexible filtering** — `Command`, `StateFilter`, `ChatTypeFilter`, `CallbackData`, `ReplyFilter`, `ForwardFilter`, regex, magic filters
 - **Custom command prefixes** — `Command("start", prefix=("/", "!", ""))` for any prefix style
 - **FSM** — Finite State Machine with Memory and Redis storage backends
 - **Middleware** — inner/outer middleware pipeline for logging, auth, throttling
-- **Text formatting** — `md`, `html` helpers for MarkdownV2/HTML + `split_text` for long messages
+- **Text formatting** — `md`, `html` helpers for MarkdownV2/HTML + `FormatBuilder` for offset/length + `split_text` for long messages
 - **Keyboard builder** — fluent API for inline keyboards with button styles
 - **Rate limiter** — built-in request throttling (`rate_limit=5` = max 5 req/sec)
+- **Retry on 5xx** — automatic retry with exponential backoff on server errors
+- **SSL control** — disable SSL verification for on-premise with self-signed certs
+- **FSM session timeout** — auto-clear abandoned FSM forms after configurable inactivity
 - **Proxy support** — route API requests through corporate proxy
 - **Edited message routing** — `handle_edited_as_message=True` to process edits as new messages
 - **Lifecycle hooks** — `on_startup` / `on_shutdown` for init/cleanup logic
@@ -136,6 +141,8 @@ bot = Bot(
     rate_limit=5.0,             # Max 5 requests/sec (None = unlimited)
     proxy="http://proxy:8080",  # HTTP proxy for corporate networks
     parse_mode="HTML",          # Default parse mode for all messages (None = plain text)
+    retry_on_5xx=3,             # Retry up to 3 times on 5xx errors (None = disabled)
+    verify_ssl=True,            # Set False for self-signed certs (on-premise)
 )
 ```
 
@@ -158,6 +165,23 @@ bot = Bot(
     api_url="https://api.internal.corp/bot/v1",
     proxy="http://corp-proxy.internal:3128",
 )
+```
+
+### Retry on 5xx
+
+Automatic retry with exponential backoff (1s, 2s, 4s, max 8s) on server errors:
+
+```python
+bot = Bot(token="TOKEN", api_url="URL", retry_on_5xx=3)   # 3 retries (default)
+bot = Bot(token="TOKEN", api_url="URL", retry_on_5xx=None) # Disabled
+```
+
+### SSL Verification
+
+On-premise installations with self-signed certificates can disable SSL verification:
+
+```python
+bot = Bot(token="TOKEN", api_url="https://internal.corp/bot/v1", verify_ssl=False)
 ```
 
 ### Default Parse Mode
@@ -315,7 +339,10 @@ from vkworkspace.filters.state import StateFilter
 ### Other Filters
 
 ```python
-from vkworkspace.filters import CallbackData, ChatTypeFilter, RegexpFilter
+from vkworkspace.filters import (
+    CallbackData, ChatTypeFilter, RegexpFilter,
+    ReplyFilter, ForwardFilter, RegexpPartsFilter,
+)
 
 # Callback data
 @router.callback_query(CallbackData("confirm"))
@@ -327,6 +354,15 @@ from vkworkspace.filters import CallbackData, ChatTypeFilter, RegexpFilter
 
 # Regex on message text
 @router.message(RegexpFilter(r"\d{4}"))
+
+# Reply / Forward detection
+@router.message(ReplyFilter())       # Message is a reply
+@router.message(ForwardFilter())     # Message contains forwards
+
+# Regex on reply/forward text
+@router.message(RegexpPartsFilter(r"urgent|asap"))
+async def on_urgent(message: Message, regexp_parts_match) -> None:
+    await message.answer("Forwarded message contains urgent text!")
 
 # Combine filters with &, |, ~
 @router.message(ChatTypeFilter("private") & Command("secret"))
@@ -425,6 +461,30 @@ Available nodes: `Text`, `Bold`, `Italic`, `Underline`, `Strikethrough`, `Code`,
 
 > **Warning:** Do not mix string helpers (`md.*` / `html.*`) with node builder — raw strings inside nodes get auto-escaped, so `Text(md.bold("x"))` produces literal `*x*`, not bold. Use `Bold("x")` instead.
 
+### Format Builder (offset/length)
+
+VK Teams also supports formatting via the `format` parameter — a JSON dict with offset/length ranges instead of markup. `FormatBuilder` makes it easy:
+
+```python
+from vkworkspace.utils import FormatBuilder
+
+# By offset/length
+fb = FormatBuilder("Hello, World! Click here.")
+fb.bold(0, 5)                               # "Hello" bold
+fb.italic(7, 6)                              # "World!" italic
+fb.link(14, 10, url="https://example.com")   # "Click here" as link
+await bot.send_text(chat_id, fb.text, format_=fb.build())
+
+# By substring (auto-find offset)
+fb = FormatBuilder("Order #42 is ready! Visit https://shop.com")
+fb.bold_text("Order #42")
+fb.italic_text("ready")
+fb.link_text("https://shop.com", url="https://shop.com")
+await bot.send_text(chat_id, fb.text, format_=fb.build())
+```
+
+Supported styles: `bold`, `italic`, `underline`, `strikethrough`, `link`, `mention`, `inline_code`, `pre`, `ordered_list`, `unordered_list`, `quote`. All methods support chaining.
+
 ## Inline Keyboards
 
 ```python
@@ -486,6 +546,21 @@ FSMContext methods:
 - `await state.update_data(key=value)` — merge into data
 - `await state.set_data({...})` — replace data entirely
 - `await state.clear()` — clear state and data
+
+### FSM Session Timeout
+
+Prevent users from getting stuck in abandoned FSM forms. When enabled, the middleware automatically clears expired FSM sessions:
+
+```python
+dp = Dispatcher(
+    storage=MemoryStorage(),
+    session_timeout=300,  # 5 minutes — clear FSM if user is inactive
+)
+```
+
+If a user starts a form and doesn't finish within 5 minutes, the next message clears the state and goes through as a normal message — no more "Enter your age" after 3 days of silence.
+
+Disabled by default (`session_timeout=None`).
 
 ## Custom Middleware
 
@@ -635,7 +710,7 @@ pip install -e ".[dev]"
 pytest tests/test_bot_api.py -v
 ```
 
-93 tests covering all Bot API methods with mocked HTTP transport — no real API calls.
+98 tests covering all Bot API methods and FSM with mocked HTTP transport — no real API calls.
 
 ### Live API Tests
 
@@ -665,13 +740,13 @@ The live test sends real messages, tests all endpoints, and cleans up after itse
 |---------|-------------|
 | [echo_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/echo_bot.py) | Basic commands + text echo |
 | [keyboard_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/keyboard_bot.py) | Inline keyboards + callback handling |
-| [fsm_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/fsm_bot.py) | Multi-step dialog with FSM |
+| [fsm_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/fsm_bot.py) | Multi-step dialog with FSM + session timeout |
 | [middleware_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/middleware_bot.py) | Custom middleware (logging, access control) |
-| [formatting_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/formatting_bot.py) | MarkdownV2/HTML formatting + Text builder |
-| [proxy_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/proxy_bot.py) | Corporate proxy + rate limiter |
+| [formatting_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/formatting_bot.py) | MarkdownV2/HTML formatting + Text builder + FormatBuilder |
+| [proxy_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/proxy_bot.py) | Corporate proxy + rate limiter + retry on 5xx + SSL control |
 | [error_handling_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/error_handling_bot.py) | Error handlers, lifecycle hooks, edited message routing |
 | [custom_prefix_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/custom_prefix_bot.py) | Custom command prefixes, regex commands, argument parsing |
-| [multi_router_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/multi_router_bot.py) | Modular sub-routers, chat events (join/leave/pin) |
+| [multi_router_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/multi_router_bot.py) | Modular sub-routers, chat events, ReplyFilter, ForwardFilter |
 | [event_logger_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/event_logger_bot.py) | Logs all 9 event types to JSONL file |
 
 ## Project Structure

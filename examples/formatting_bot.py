@@ -1,9 +1,10 @@
 """
-Text formatting bot — demonstrates three formatting approaches:
+Text formatting bot — demonstrates four formatting approaches:
 
 1. String helpers (md.*, html.*) — quick inline formatting
 2. Text builder (Bold, Italic, ...) — composable nodes with auto parse_mode
-3. Raw markdown — write **bold** directly with bot's default parse_mode
+3. FormatBuilder — offset/length formatting via `format` parameter
+4. Raw markdown — write **bold** directly with bot's default parse_mode
 
 parse_mode can be set in two places:
     - Bot(parse_mode=ParseMode.HTML) — default for ALL messages
@@ -13,6 +14,7 @@ Commands:
     /md       — MarkdownV2 with string helpers
     /html     — HTML with string helpers
     /builder  — Text builder (aiogram-style nodes)
+    /format   — FormatBuilder (offset/length)
     /long     — split_text for long messages
     /escape   — safe escaping of user input
 
@@ -26,6 +28,7 @@ from vkworkspace import Bot, Dispatcher, F, Router
 from vkworkspace.enums import ParseMode
 from vkworkspace.filters import Command
 from vkworkspace.types import Message
+from vkworkspace.utils import FormatBuilder
 from vkworkspace.utils.text import (
     Bold,
     Code,
@@ -50,6 +53,7 @@ async def cmd_start(message: Message) -> None:
         "/md — MarkdownV2 (string helpers)\n",
         "/html — HTML (string helpers)\n",
         "/builder — Text builder (aiogram-style)\n",
+        "/format — FormatBuilder (offset/length)\n",
         "/long — split_text for long messages\n",
         "/escape — safe escaping of user input",
     )
@@ -117,6 +121,16 @@ async def cmd_builder(message: Message) -> None:
     # Render as MarkdownV2 instead
     simple = Text("Same content, ", Bold("different mode"))
     await message.answer(**simple.as_kwargs("MarkdownV2"))
+
+
+@router.message(Command("format"))
+async def cmd_format(message: Message, bot: Bot) -> None:
+    # FormatBuilder: offset/length formatting without markup
+    fb = FormatBuilder("Order #42 is ready! Visit https://shop.com")
+    fb.bold_text("Order #42")
+    fb.italic_text("ready")
+    fb.link_text("https://shop.com", url="https://shop.com")
+    await bot.send_text(message.chat.chat_id, fb.text, format_=fb.build())
 
 
 @router.message(Command("long"))
