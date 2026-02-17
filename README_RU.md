@@ -552,6 +552,11 @@ await bot.get_me()
 
 # Сообщения
 await bot.send_text(chat_id, "Привет!", parse_mode="HTML")
+await bot.send_text(chat_id, "Ответ", reply_msg_id=msg_id)               # Ответ
+await bot.send_text(chat_id, "Ответ", reply_msg_id=[id1, id2])           # Мульти-ответ
+await bot.send_text(chat_id, "Пересылка", forward_chat_id=cid, forward_msg_id=mid)  # Пересылка
+await bot.send_text(chat_id, "Привет", request_id="unique-123")           # Идемпотентная отправка
+await bot.send_text_with_deeplink(chat_id, "Открой", deeplink="payload")  # Deeplink
 await bot.edit_text(chat_id, msg_id, "Обновлено")
 await bot.delete_messages(chat_id, msg_id)
 await bot.send_file(chat_id, file=InputFile("фото.jpg"), caption="Смотри!")
@@ -571,7 +576,8 @@ await bot.set_chat_avatar(chat_id, file=InputFile("avatar.png"))
 await bot.block_user(chat_id, user_id, del_last_messages=True)
 await bot.unblock_user(chat_id, user_id)
 await bot.resolve_pending(chat_id, approve=True, user_id=uid)
-await bot.delete_chat_members(chat_id, members=[uid1, uid2])
+await bot.add_chat_members(chat_id, members=[uid1, uid2])                  # Добавить участников
+await bot.delete_chat_members(chat_id, members=[uid1, uid2])               # Удалить участников
 await bot.pin_message(chat_id, msg_id)
 await bot.unpin_message(chat_id, msg_id)
 await bot.send_actions(chat_id, "typing")
@@ -639,6 +645,42 @@ await message.answer(
 | [custom_prefix_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/custom_prefix_bot.py) | Кастомные префиксы команд, regex, парсинг аргументов |
 | [multi_router_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/multi_router_bot.py) | Модульные подроутеры, события чата (вход/выход/закреп) |
 | [formatting_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/formatting_bot.py) | Форматирование MarkdownV2/HTML + split_text для длинных сообщений |
+| [event_logger_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/event_logger_bot.py) | Логирует все 9 типов событий в JSONL-файл |
+
+## Тестирование
+
+В проекте два вида тестов:
+
+### Unit-тесты (мок)
+
+```bash
+pip install -e ".[dev]"
+pytest tests/test_bot_api.py -v
+```
+
+93 теста покрывают все методы Bot API с моком HTTP-транспорта — реальных запросов к API не делается.
+
+### Live-тесты (боевой API)
+
+Запуск на реальном инстансе VK Teams для проверки что все методы работают в вашем окружении:
+
+```bash
+python tests/test_bot_live.py \
+    --token "ТОКЕН_БОТА" \
+    --api-url "https://myteam.mail.ru/bot/v1" \
+    --chat "ID_ГРУППОВОГО_ЧАТА"
+```
+
+Или через переменные окружения:
+
+```bash
+export VKWS_TOKEN="..."
+export VKWS_API_URL="https://myteam.mail.ru/bot/v1"
+export VKWS_CHAT_ID="12345@chat.agent"
+python tests/test_bot_live.py
+```
+
+Live-тест отправляет реальные сообщения, проверяет все эндпоинты и убирает за собой. Методы, не поддерживаемые на вашей инсталляции (например, треды), автоматически пропускаются.
 
 ## Структура проекта
 
