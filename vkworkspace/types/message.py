@@ -9,7 +9,8 @@ from .chat import Chat
 from .user import Contact
 
 if TYPE_CHECKING:
-    from vkworkspace.enums import ParseMode
+    from vkworkspace.enums import ChatAction, ParseMode
+    from vkworkspace.utils.actions import ChatActionSender
 
 _UNSET: Any = object()
 
@@ -359,6 +360,60 @@ class Message(VKTeamsObject):
         return await self.bot.unpin_message(
             chat_id=self.chat.chat_id,
             msg_id=self.msg_id,
+        )
+
+    async def answer_chat_action(
+        self,
+        action: ChatAction | str | None = None,
+    ) -> Any:
+        """Send a one-shot chat action (typing/looking).
+
+        Args:
+            action: Action to send. Defaults to ``ChatAction.TYPING``.
+
+        Example::
+
+            await message.answer_chat_action()
+            await message.answer_chat_action(ChatAction.LOOKING)
+        """
+        from vkworkspace.enums.chat_action import ChatAction as ChatActionEnum
+
+        return await self.bot.send_actions(
+            self.chat.chat_id,
+            str(action or ChatActionEnum.TYPING),
+        )
+
+    def typing(
+        self,
+        action: ChatAction | str | None = None,
+        interval: float = 3.0,
+    ) -> ChatActionSender:
+        """Async context manager that sends "typing..." while the block runs.
+
+        Args:
+            action: Action to send. Defaults to ``ChatAction.TYPING``.
+                Pass ``ChatAction.LOOKING`` for "looking" indicator.
+            interval: Resend interval in seconds (default 3.0).
+
+        Returns:
+            ``ChatActionSender`` — use with ``async with``.
+
+        Example::
+
+            @router.message(Command("report"))
+            async def report(message: Message):
+                async with message.typing():
+                    result = await slow_computation()
+                await message.answer(result)
+        """
+        from vkworkspace.enums.chat_action import ChatAction as ChatActionEnum
+        from vkworkspace.utils.actions import ChatActionSender
+
+        return ChatActionSender(
+            bot=self.bot,
+            chat_id=self.chat.chat_id,
+            action=action or ChatActionEnum.TYPING,
+            interval=interval,
         )
 
     async def answer_file(
