@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.1] - 2026-02-17
+
+### Improved
+- Explicit `ParseMode | str | None` type hints in `Bot.send_text()`, `Bot.edit_text()`, `Bot.send_file()` and `Bot.__init__(parse_mode=...)`
+- `Message.answer()`, `reply()`, `edit_text()`, `answer_file()`, `answer_voice()` now expose `parse_mode` and `inline_keyboard_markup` as named parameters (IDE autocomplete)
+
 ## [1.2.0] - 2026-02-16
 
 ### Added
@@ -61,6 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Inline keyboard builder utility
 - 10 example bots (echo, keyboard, FSM, middleware, proxy, diagnostic, API tester, etc.)
 
+[1.2.1]: https://github.com/TimmekHW/vkworkspace/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/TimmekHW/vkworkspace/compare/v1.0.0...v1.0.1
