@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] - 2026-02-18
+
+### Added
+- `CallbackDataFactory` — structured, typed callback data (aiogram-style): define fields once, `pack()`/`unpack()` automatically, `filter()` with magic-filter support
+- `Paginator` — keyboard pagination helper with `◀`/`▶` navigation, `page_data`, `has_prev`/`has_next`, `add_nav_row()` for InlineKeyboardBuilder
+- `PaginationCB` — ready-made callback data for paginator buttons
+- `ChatActionSender` — async context manager that sends typing/looking action periodically while a block runs
+- `@typing_action` decorator — wraps a handler to show "Bot is typing..." automatically (supports `action=` and `interval=` parameters)
+- `Message.typing()` — shortcut returning `ChatActionSender` context manager
+- `Message.answer_chat_action()` — one-shot action send (like aiogram's `answer_chat_action`)
+- `ButtonStyle.BASE` enum value
+- `typing_action_bot.py` example — demonstrates decorator, context manager, and one-shot approaches
+- 18 new tests for typing actions (`test_typing_action.py`)
+- PyPI download badges in README and README_RU
+
 ## [1.5.0] - 2026-02-18
 
 ### Added
@@ -137,6 +152,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Inline keyboard builder utility
 - 10 example bots (echo, keyboard, FSM, middleware, proxy, diagnostic, API tester, etc.)
 
+[1.6.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/TimmekHW/vkworkspace/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.3.0...v1.4.0

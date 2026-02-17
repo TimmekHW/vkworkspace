@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vkworkspace"
-version = "1.5.0"
+version = "1.6.0"
 description = "Fully async framework for building VK Teams (VK Workspace) bots, inspired by aiogram 3"
 readme = "README.md"
 license = { text = "MIT" }
