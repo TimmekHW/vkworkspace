@@ -9,8 +9,6 @@ jobs:
     - uses: actions/checkout@v4
     - name: Install uv
       uses: astral-sh/setup-uv@v5
-    - name: Set up Python
-      run: uv python install 3.13
     - name: Check code with ruff
       run: uvx ruff check .
 
@@ -23,6 +21,6 @@ jobs:
     - name: Set up Python
       run: uv python install 3.13
     - name: Install dependencies
-      run: uv pip install --system -e ".[dev]"
+      run: uv venv && uv pip install -e ".[dev]"
     - name: Check types with pyright
-      run: uvx pyright vkworkspace/
+      run: uv run pyright vkworkspace/
