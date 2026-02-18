@@ -7,7 +7,7 @@ Demonstrates three ways to send chat actions:
   /ping      — await message.answer_chat_action() one-shot
 
 Usage:
-    python examples/typing_action_bot.py
+    python examples/features/typing_actions.py
 """
 
 import asyncio

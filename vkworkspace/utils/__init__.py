@@ -1,5 +1,6 @@
 from .format_builder import FormatBuilder
 from .keyboard import InlineKeyboardBuilder, InlineKeyboardButton
+from .scheduler import Scheduler
 from .text import (
     Bold,
     Code,
@@ -29,6 +30,7 @@ __all__ = [
     "Pre",
     "Quote",
     "Raw",
+    "Scheduler",
     "Strikethrough",
     "Text",
     "Underline",

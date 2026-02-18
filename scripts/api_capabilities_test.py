@@ -5,10 +5,10 @@ VK Teams / VK Workspace — API Capabilities Tester.
 подробный отчёт: что работает, что запрещено, что требует прав.
 
 Запуск:
-    py -3.13 examples/api_capabilities_test.py
+    py -3.13 scripts/api_capabilities_test.py
 
 Или с аргументами:
-    py -3.13 examples/api_capabilities_test.py --token "XXX" --url "https://..." --chat-id "user@corp.ru"
+    py -3.13 scripts/api_capabilities_test.py --token "XXX" --url "https://..." --chat-id "user@corp.ru"
 
 Отчёт сохраняется в api_report.txt рядом со скриптом.
 

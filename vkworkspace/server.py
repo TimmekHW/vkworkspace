@@ -8,7 +8,7 @@ Standalone server::
 
     from vkworkspace.server import BotServer
 
-    server = BotServer(token="TOKEN", api_url="https://api.teams.sovcombank.ru/bot/v1")
+    server = BotServer(token="TOKEN", api_url="https://myteam.mail.ru/bot/v1")
 
     @server.route("/send")
     async def send(bot, data):
@@ -37,6 +37,16 @@ Server + bot handlers (HTTP + polling in one process)::
     server.include_router(router)
     server.run(port=8080)  # HTTP server + VK Teams polling
 
+Lifecycle hooks::
+
+    @server.on_startup
+    async def setup():
+        logger.info("Server starting...")
+
+    @server.on_shutdown
+    async def cleanup():
+        await db.close()
+
 Embed into existing async app::
 
     # In your FastAPI / Quart startup:
@@ -49,6 +59,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import signal
 from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -84,6 +95,12 @@ class BotServer:
     Optionally, call :meth:`include_router` to also handle VK Teams events
     (messages, callbacks, FSM) via long-polling — both run in a single process.
 
+    Features:
+        - Graceful shutdown on SIGINT/SIGTERM
+        - ``on_startup`` / ``on_shutdown`` lifecycle hooks
+        - ``include_router()`` for VK Teams polling alongside HTTP
+        - ``get_state()`` for FSM access from route handlers
+
     Args:
         token: Bot token from BotFather.
         api_url: VK Teams API base URL.
@@ -109,6 +126,10 @@ class BotServer:
         self.api_key = api_key
         self._routes: dict[str, tuple[set[str], RouteHandler]] = {}
         self._dispatcher: Any | None = None
+        self._running = False
+        self._shutdown_event = asyncio.Event()
+        self._on_startup: list[Callable[..., Any]] = []
+        self._on_shutdown: list[Callable[..., Any]] = []
 
     # ── route decorator ───────────────────────────────────────────────
 
@@ -148,13 +169,78 @@ class BotServer:
 
         return decorator
 
+    # ── lifecycle hooks ────────────────────────────────────────────────
+
+    def on_startup(
+        self, callback: Callable[..., Any] | None = None,
+    ) -> Any:
+        """Register a startup hook. Runs before the server starts accepting.
+
+        Can be used as a decorator or called directly::
+
+            @server.on_startup
+            async def setup():
+                logger.info("Server starting...")
+
+            # or
+            server.on_startup(my_setup_function)
+        """
+        if callback:
+            self._on_startup.append(callback)
+            return callback
+
+        def decorator(cb: Callable[..., Any]) -> Callable[..., Any]:
+            self._on_startup.append(cb)
+            return cb
+
+        return decorator
+
+    def on_shutdown(
+        self, callback: Callable[..., Any] | None = None,
+    ) -> Any:
+        """Register a shutdown hook. Runs after the server stops.
+
+        Example::
+
+            @server.on_shutdown
+            async def cleanup():
+                await db.close()
+        """
+        if callback:
+            self._on_shutdown.append(callback)
+            return callback
+
+        def decorator(cb: Callable[..., Any]) -> Callable[..., Any]:
+            self._on_shutdown.append(cb)
+            return cb
+
+        return decorator
+
+    async def _emit_startup(self) -> None:
+        for cb in self._on_startup:
+            if asyncio.iscoroutinefunction(cb):
+                await cb()
+            else:
+                cb()
+        if self._dispatcher:
+            await self._dispatcher.emit_startup()
+
+    async def _emit_shutdown(self) -> None:
+        for cb in self._on_shutdown:
+            if asyncio.iscoroutinefunction(cb):
+                await cb()
+            else:
+                cb()
+        if self._dispatcher:
+            await self._dispatcher.emit_shutdown()
+
     # ── VK Teams event handling ───────────────────────────────────────
 
     def include_router(self, router: Any, storage: Any | None = None) -> None:
         """Add VK Teams event handlers (enables polling alongside HTTP).
 
         When at least one router is included, :meth:`start` runs both
-        the HTTP server and ``Dispatcher.start_polling`` concurrently.
+        the HTTP server and ``Dispatcher`` polling concurrently.
 
         Args:
             router: A :class:`Router` with message/callback handlers.
@@ -176,6 +262,52 @@ class BotServer:
 
             self._dispatcher = Dispatcher(storage=storage or MemoryStorage())
         self._dispatcher.include_router(router)
+
+    # ── FSM access from routes ─────────────────────────────────────────
+
+    def get_state(self, chat_id: str, user_id: str | None = None) -> Any:
+        """Get :class:`FSMContext` for use in route handlers.
+
+        Bridges HTTP routes and bot event handlers — route handler can
+        set FSM state/data that callback/message handlers will read.
+
+        Requires :meth:`include_router` to be called first (creates storage).
+
+        Args:
+            chat_id: Target chat ID.
+            user_id: User ID (defaults to ``chat_id`` for DMs).
+
+        Returns:
+            :class:`FSMContext` instance.
+
+        Example::
+
+            @server.route("/start-survey")
+            async def start_survey(bot, data):
+                state = server.get_state(chat_id=data["email"])
+                await state.set_state(Survey.question_1)
+                await bot.send_text(data["email"], "Как дела?")
+        """
+        if self._dispatcher is None:
+            msg = "No router included. Call include_router() first."
+            raise RuntimeError(msg)
+
+        from vkworkspace.fsm.context import FSMContext
+        from vkworkspace.fsm.storage.base import StorageKey
+
+        key = StorageKey(
+            bot_id=self.bot.token[:16],
+            chat_id=chat_id,
+            user_id=user_id or chat_id,
+        )
+        return FSMContext(storage=self._dispatcher.storage, key=key)
+
+    # ── properties ─────────────────────────────────────────────────────
+
+    @property
+    def is_running(self) -> bool:
+        """Whether the server is currently running."""
+        return self._running
 
     # ── HTTP parsing ──────────────────────────────────────────────────
 
@@ -305,10 +437,10 @@ class BotServer:
             self._write_response(writer, 200, result or {"ok": True})
             await writer.drain()
 
-        except Exception as exc:
+        except Exception:
             logger.exception("Request handling error")
             try:
-                self._write_response(writer, 500, {"ok": False, "error": str(exc)})
+                self._write_response(writer, 500, {"ok": False, "error": "internal server error"})
                 await writer.drain()
             except Exception:
                 pass
@@ -317,7 +449,7 @@ class BotServer:
             with contextlib.suppress(Exception):
                 await writer.wait_closed()
 
-    # ── start / run ───────────────────────────────────────────────────
+    # ── start / stop / run ────────────────────────────────────────────
 
     async def start(self) -> None:
         """Start the server (async).
@@ -325,33 +457,73 @@ class BotServer:
         If routers were added via :meth:`include_router`, also starts
         VK Teams long-polling in the same event loop.
 
+        Registers SIGINT/SIGTERM handlers for graceful shutdown.
+
         Use inside an existing loop::
 
             asyncio.create_task(server.start())
         """
+        self._running = True
+        self._shutdown_event.clear()
+
         srv = await asyncio.start_server(
             self._handle_connection,
             self.host,
             self.port,
         )
 
-        addrs = ", ".join(str(s.getsockname()) for s in srv.sockets)
-        routes = ", ".join(sorted(self._routes)) or "(none)"
-        logger.info("BotServer listening on %s", addrs)
-        logger.info("Routes: %s + /health", routes)
+        tasks: list[asyncio.Task[None]] = []
+        try:
+            await self._emit_startup()
 
-        if self._dispatcher:
-            logger.info("Polling enabled — bot handlers will receive VK Teams events")
+            loop = asyncio.get_running_loop()
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                with contextlib.suppress(NotImplementedError):
+                    loop.add_signal_handler(sig, self._stop_signal)
 
-        async with srv:
+            addrs = ", ".join(str(s.getsockname()) for s in srv.sockets)
+            routes = ", ".join(sorted(self._routes)) or "(none)"
+            logger.info("BotServer listening on %s", addrs)
+            logger.info("Routes: %s + /health", routes)
+
+            tasks.append(asyncio.create_task(srv.serve_forever()))
+
+            async def _shutdown_waiter() -> None:
+                await self._shutdown_event.wait()
+
+            tasks.append(asyncio.create_task(_shutdown_waiter()))
+
             if self._dispatcher:
-                # Run HTTP server + VK Teams polling concurrently
-                await asyncio.gather(
-                    srv.serve_forever(),
-                    self._dispatcher.start_polling(self.bot),
-                )
-            else:
-                await srv.serve_forever()
+                self._dispatcher._running = True
+                tasks.append(asyncio.create_task(self._dispatcher._polling(self.bot)))
+                logger.info("Polling enabled — bot handlers will receive VK Teams events")
+
+            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        except asyncio.CancelledError:
+            logger.info("Server cancelled")
+        finally:
+            self._running = False
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
+            srv.close()
+            await srv.wait_closed()
+            await self._emit_shutdown()
+            await self.bot.close()
+
+    def stop(self) -> None:
+        """Stop the server gracefully.
+
+        Stops the HTTP server and VK Teams polling (if enabled).
+        """
+        self._running = False
+        if self._dispatcher:
+            self._dispatcher._running = False
+        self._shutdown_event.set()
+
+    def _stop_signal(self) -> None:
+        logger.info("Received stop signal")
+        self.stop()
 
     def run(self, host: str | None = None, port: int | None = None) -> None:
         """Start the server (blocking).

@@ -5,7 +5,7 @@ Purpose: reverse-engineer undocumented features, discover new event types,
 find changed payload structures, and document every field the API sends.
 
 Usage:
-    python examples/diagnostic_bot.py
+    python scripts/diagnostic_bot.py
 
     Then send the bot: text, images, stickers, voice, files, forwards, replies,
     reactions, polls, callback buttons, inline queries, add/remove users,

@@ -14,7 +14,7 @@ For Python apps you don't need BotServer — use Bot directly::
 Or run Dispatcher in the background of your FastAPI/Django/Flask app.
 
 Usage:
-    python examples/server_with_bot.py
+    python examples/integrations/server_with_bot.py
 
     curl -X POST http://localhost:8080/send -H "Content-Type: application/json" \
         -d '{"email": "user@corp.ru", "text": "Hello!"}'

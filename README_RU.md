@@ -738,18 +738,29 @@ await message.answer(
 
 ## Примеры
 
+**[Полный гайд по примерам](https://github.com/TimmekHW/vkworkspace/blob/main/examples/README.md)**
+
 | Пример | Описание |
 |--------|----------|
 | [echo_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/echo_bot.py) | Базовые команды + эхо-бот |
-| [keyboard_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/keyboard_bot.py) | Inline-клавиатуры + обработка callback |
-| [fsm_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/fsm_bot.py) | Многошаговый диалог с FSM + таймаут сессий |
-| [middleware_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/middleware_bot.py) | Middleware (логирование, контроль доступа) |
-| [proxy_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/proxy_bot.py) | Корпоративный прокси + rate limiter + ретрай 5xx + SSL |
-| [error_handling_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/error_handling_bot.py) | Обработка ошибок, хуки жизненного цикла, роутинг правок |
-| [custom_prefix_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/custom_prefix_bot.py) | Кастомные префиксы команд, regex, парсинг аргументов |
-| [multi_router_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/multi_router_bot.py) | Подроутеры, события чата, ReplyFilter, ForwardFilter |
-| [formatting_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/formatting_bot.py) | MarkdownV2/HTML + Text builder + FormatBuilder |
-| [event_logger_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/event_logger_bot.py) | Логирует все 9 типов событий в JSONL-файл |
+| **Фичи** | |
+| [keyboards.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/features/keyboards.py) | Inline-клавиатуры, callback, CallbackDataFactory, пагинация |
+| [formatting.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/features/formatting.py) | MarkdownV2/HTML + Text builder + FormatBuilder |
+| [fsm.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/features/fsm.py) | Многошаговый диалог с FSM + таймаут сессий |
+| [files.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/features/files.py) | 8 способов отправки файлов + голосовые |
+| [typing_actions.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/features/typing_actions.py) | Индикатор набора: декоратор, context manager, one-shot |
+| [middleware.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/features/middleware.py) | Middleware (логирование, контроль доступа) |
+| [multi_router.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/features/multi_router.py) | Подроутеры, события чата, ReplyFilter, ForwardFilter |
+| [error_handling.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/features/error_handling.py) | Обработка ошибок, хуки жизненного цикла, роутинг правок |
+| [custom_prefix.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/features/custom_prefix.py) | Кастомные префиксы команд, regex, парсинг аргументов |
+| [proxy.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/features/proxy.py) | Корпоративный прокси + rate limiter + ретрай 5xx + SSL |
+| **Интеграции** | |
+| [server_with_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/integrations/server_with_bot.py) | BotServer — HTTP API для не-Python систем |
+| [fastapi_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/integrations/fastapi_bot.py) | Бот внутри FastAPI с общим Bot и DI |
+| [redis_listener.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/integrations/redis_listener.py) | RedisListener — задачи из Redis Streams |
+| [zabbix_alert.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/integrations/zabbix_alert.py) | Алерты Zabbix с цепочкой обратной связи (FSM + BotServer) |
+| [chatops.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/integrations/chatops.py) | ChatOps с RBAC, Scheduler, аудит-логом |
+| [report.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/integrations/report.py) | BI-отчёты: run_sync() для Oracle/pandas, Scheduler |
 
 ## Тестирование
 

@@ -3,7 +3,7 @@ Multi-router bot — demonstrates modular code organization with sub-routers,
 chat event handling, and the full range of event types.
 
 Usage:
-    python examples/multi_router_bot.py
+    python examples/features/multi_router.py
 """
 
 import asyncio

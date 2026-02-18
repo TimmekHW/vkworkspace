@@ -2,7 +2,7 @@
 FSM bot — demonstrates Finite State Machine for multi-step dialogs.
 
 Usage:
-    python examples/fsm_bot.py
+    python examples/features/fsm.py
 """
 
 import asyncio

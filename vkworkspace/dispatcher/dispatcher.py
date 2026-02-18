@@ -56,6 +56,15 @@ class Dispatcher(Router):
         - FSM context injection (``state: FSMContext`` in handlers)
         - Session timeout (auto-clear stale FSM sessions)
         - Graceful shutdown on SIGINT/SIGTERM
+        - ``is_running`` property for health checks
+        - ``handle_signals=False`` for embedding in FastAPI / Quart
+        - ``close_bot_on_stop=False`` for shared Bot instances
+
+    Embedded in FastAPI::
+
+        asyncio.create_task(
+            dp.start_polling(bot, handle_signals=False, close_bot_on_stop=False)
+        )
     """
 
     def __init__(
@@ -239,6 +248,8 @@ class Dispatcher(Router):
         self,
         *bots: Any,
         skip_updates: bool = False,
+        handle_signals: bool = True,
+        close_bot_on_stop: bool = True,
     ) -> None:
         """Start long-polling for one or more bots.
 
@@ -249,6 +260,12 @@ class Dispatcher(Router):
         Args:
             *bots: One or more ``Bot`` instances to poll.
             skip_updates: Discard pending updates on startup (default False).
+            handle_signals: Register SIGINT/SIGTERM handlers (default True).
+                Set ``False`` when running as a background task inside
+                another framework (FastAPI, Quart) that manages signals.
+            close_bot_on_stop: Close bot sessions on stop (default True).
+                Set ``False`` when sharing a ``Bot`` instance with other
+                parts of your app (e.g. FastAPI endpoints).
 
         Example::
 
@@ -256,16 +273,23 @@ class Dispatcher(Router):
             dp = Dispatcher()
             dp.include_router(router)
             await dp.start_polling(bot)
+
+        Embedded in FastAPI::
+
+            asyncio.create_task(
+                dp.start_polling(bot, handle_signals=False, close_bot_on_stop=False)
+            )
         """
         self._running = True
 
         await self.emit_startup()
 
         try:
-            loop = asyncio.get_running_loop()
-            for sig in (signal.SIGINT, signal.SIGTERM):
-                with contextlib.suppress(NotImplementedError):
-                    loop.add_signal_handler(sig, self._stop_signal)
+            if handle_signals:
+                loop = asyncio.get_running_loop()
+                for sig in (signal.SIGINT, signal.SIGTERM):
+                    with contextlib.suppress(NotImplementedError):
+                        loop.add_signal_handler(sig, self._stop_signal)
 
             if skip_updates:
                 for bot in bots:
@@ -278,12 +302,19 @@ class Dispatcher(Router):
         finally:
             self._running = False
             await self.emit_shutdown()
-            for bot in bots:
-                await bot.close()
+            if close_bot_on_stop:
+                for bot in bots:
+                    await bot.close()
 
     def _stop_signal(self) -> None:
         logger.info("Received stop signal")
         self._running = False
 
+    @property
+    def is_running(self) -> bool:
+        """Whether the dispatcher is currently polling."""
+        return self._running
+
     async def stop(self) -> None:
+        """Stop polling gracefully."""
         self._running = False

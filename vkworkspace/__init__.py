@@ -23,8 +23,10 @@ from vkworkspace.client.bot import Bot
 from vkworkspace.dispatcher.dispatcher import Dispatcher
 from vkworkspace.dispatcher.middlewares.base import BaseMiddleware
 from vkworkspace.dispatcher.router import Router
+from vkworkspace.listener import RedisListener
 from vkworkspace.server import BotServer
 from vkworkspace.utils.magic_filter import F
+from vkworkspace.utils.scheduler import Scheduler
 
 __all__ = [
     "BaseMiddleware",
@@ -32,6 +34,8 @@ __all__ = [
     "BotServer",
     "Dispatcher",
     "F",
+    "RedisListener",
     "Router",
+    "Scheduler",
     "__version__",
 ]

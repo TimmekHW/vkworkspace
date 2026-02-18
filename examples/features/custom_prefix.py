@@ -3,7 +3,7 @@ Custom prefix bot — demonstrates Command filter with custom prefixes
 and command argument parsing.
 
 Usage:
-    python examples/custom_prefix_bot.py
+    python examples/features/custom_prefix.py
 """
 
 import asyncio

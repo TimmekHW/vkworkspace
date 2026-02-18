@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# ruff: noqa: E501
 """Generate llm_full.md — comprehensive LLM reference for vkworkspace.
 
 Reads source files, extracts public API (methods, types, enums),
@@ -18,7 +17,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "vkworkspace"
-EXAMPLES_DIR = ROOT / "examples"
 OUTPUT = ROOT / "llm_full.md"
 
 
@@ -237,17 +235,6 @@ def extract_types_exports() -> list[str]:
     return []
 
 
-def extract_example_docs() -> list[dict[str, str]]:
-    """Extract example filenames and their module docstrings."""
-    examples: list[dict[str, str]] = []
-    for path in sorted(EXAMPLES_DIR.glob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        doc = ast.get_docstring(tree) or ""
-        first_line = doc.split("\n")[0].strip() if doc else path.stem.replace("_", " ")
-        examples.append({"filename": path.name, "description": first_line})
-    return examples
-
-
 # ── Template sections ─────────────────────────────────────────────────
 
 
@@ -397,6 +384,56 @@ from vkworkspace import Bot
 {send_text_display}
 ```
 
+### send_file Parameters
+
+```python
+await bot.send_file(
+    chat_id="user@company.ru",  # target chat ID
+    file_id=None,                # resend by file_id (instant, no re-upload)
+    file=None,                   # InputFile or BinaryIO for upload
+    caption=None,                # caption text
+    reply_msg_id=None,           # reply to message
+    forward_chat_id=None,        # forward from chat
+    forward_msg_id=None,         # forward message ID
+    inline_keyboard_markup=None, # inline keyboard
+    parse_mode=...,              # "HTML" / "MarkdownV2" / None
+    format_=None,                # offset/length formatting
+    parent_topic=None,           # send in thread
+    request_id=None,             # idempotency key
+)
+```
+
+### edit_text Parameters
+
+```python
+await bot.edit_text(
+    chat_id="user@company.ru",  # target chat ID
+    msg_id="message_id",         # message to edit
+    text="Updated text",         # new message text
+    inline_keyboard_markup=None, # inline keyboard
+    parse_mode=...,              # "HTML" / "MarkdownV2" / None
+    format_=None,                # offset/length formatting
+)
+```
+
+### Proxy & Rate Limiting
+
+```python
+# Corporate proxy (only affects Bot API requests)
+bot = Bot(
+    token="TOKEN",
+    api_url="https://myteam.mail.ru/bot/v1",
+    proxy="http://proxy-server:8535",
+    verify_ssl=False,          # self-signed certs on on-premise
+)
+
+# Rate limiting: max 5 requests/sec (token-bucket)
+bot = Bot(token="TOKEN", api_url="...", rate_limit=5)
+
+# Auto-retry on 5xx errors (default: 3 retries with exponential backoff)
+bot = Bot(token="TOKEN", api_url="...", retry_on_5xx=3)  # None or 0 = no retry
+```
+
 ---"""
 
 
@@ -495,6 +532,16 @@ async def greet(message: Message, command: CommandObject):
     await message.answer(f"Hello, {name}!")
 ```
 
+### CommandObject Fields
+
+```python
+command.prefix   # str — "/" (or custom prefix)
+command.command   # str — command name without prefix ("start")
+command.args     # str — everything after the command ("arg1 arg2")
+command.raw_text # str — original full text ("/start arg1 arg2")
+command.match    # re.Match | None — regex match (when using regex commands)
+```
+
 ### Other Filters
 
 ```python
@@ -520,6 +567,42 @@ async def greet(message: Message, command: CommandObject):
 @router.message(Command("start"), ChatTypeFilter("private"))  # AND
 @router.message(Command("a") | Command("b"))                  # OR
 @router.message(~Command("start"))                             # NOT
+```
+
+### Custom Filters
+
+```python
+from vkworkspace.filters.base import BaseFilter
+
+class AdminFilter(BaseFilter):
+    def __init__(self, admin_ids: list[str]):
+        self.admin_ids = admin_ids
+
+    async def __call__(self, event, **kwargs) -> bool:
+        user = getattr(event, "from_user", None)
+        if user is None:
+            return False
+        return user.user_id in self.admin_ids
+
+# Usage
+admins = AdminFilter(["admin@corp.ru", "boss@corp.ru"])
+@router.message(Command("ban"), admins)
+async def cmd_ban(message: Message):
+    await message.answer("User banned.")
+
+# Return dict to inject kwargs into handler
+class ExtractEmail(BaseFilter):
+    async def __call__(self, event, **kwargs) -> bool | dict:
+        text = getattr(event, "text", None) or ""
+        import re
+        m = re.search(r"[\\w.+-]+@[\\w-]+\\.[\\w.]+", text)
+        if not m:
+            return False
+        return {"email": m.group(0)}  # injected as handler kwarg
+
+@router.message(ExtractEmail())
+async def on_email(message: Message, email: str):  # `email` auto-injected
+    await message.answer(f"Got email: {email}")
 ```
 
 ---"""
@@ -832,6 +915,14 @@ async def get_data(message: Message, api):  # `api` auto-injected
     await message.answer(str(result))
 ```
 
+### Dispatcher-Level Middleware
+
+```python
+# Applies to ALL routers included in dp
+dp.message.middleware.register(LoggingMiddleware())
+dp.callback_query.middleware.register(LoggingMiddleware())
+```
+
 ---"""
 
 
@@ -966,14 +1057,52 @@ await message.answer_voice(file=InputFile(ogg, filename="voice.ogg"))
 
 ERROR_HANDLING = """\
 
-## Error Handling
+## Error Handling & Lifecycle
+
+### Unhandled Exceptions
 
 ```python
 @router.error()
 async def on_error(error: Exception, bot, raw_event, **kwargs):
     logging.exception("Unhandled error: %s", error)
-    # Optionally notify admin
-    await bot.send_text("admin@corp.ru", f"Bot error: {error}")
+    await bot.send_text("admin@corp.ru", f"Bot error: {type(error).__name__}")
+```
+
+### Lifecycle Hooks
+
+```python
+@dp.on_startup
+async def setup():
+    # Runs once before polling starts
+    global db_pool
+    db_pool = await create_pool(DSN)
+    scheduler.start(bot, db=db_pool)
+
+@dp.on_shutdown
+async def cleanup():
+    # Runs on SIGINT/SIGTERM (Ctrl+C)
+    await scheduler.stop()
+    await db_pool.close()
+```
+
+### Graceful Shutdown
+
+```python
+async def main():
+    bot = Bot(token="TOKEN", api_url="https://myteam.mail.ru/bot/v1")
+    dp = Dispatcher()
+    dp.include_router(router)
+    # Blocks until Ctrl+C; on_shutdown hooks run automatically
+    await dp.start_polling(bot)
+
+asyncio.run(main())
+```
+
+### Edited Messages as Regular Messages
+
+```python
+dp = Dispatcher(handle_edited_as_message=True)
+# edited_message events now routed to @router.message() handlers
 ```
 
 ---"""
@@ -984,16 +1113,26 @@ THREADS = """\
 ## Threads
 
 ```python
-# Send message in a thread
+# Create a thread under a message
+thread = await bot.threads_add(chat_id, msg_id, title="Discussion")
+
+# Send message inside a thread
 await bot.send_text(chat_id, "In thread", parent_topic=parent_msg)
 
-# Create a thread under a message
+# Reply inside a thread (auto-propagates parent_topic)
 await message.answer_thread("Starting a thread here!")
 
 # Check if message is from a thread
 if message.is_thread_message:
-    # message.parent_topic has thread info
-    ...
+    topic = message.parent_topic  # ParentMessage(chat_id, message_id, type)
+    await message.answer("Replying inside the thread")
+
+# Thread subscribers
+subs = await bot.threads_get_subscribers(chat_id, thread_msg_id)
+# subs.subscribers → list[Subscriber]
+
+# Auto-subscribe new members to a thread
+await bot.threads_autosubscribe(chat_id, thread_msg_id, enable=True)
 ```
 
 ---"""
@@ -1076,6 +1215,154 @@ dp = Dispatcher()
 dp.include_router(router)
 asyncio.create_task(dp.start_polling(bot))  # runs in background
 ```
+
+---"""
+
+
+SCHEDULER = """\
+
+## Scheduler — Periodic Tasks
+
+Zero dependencies, pure asyncio. No APScheduler needed.
+
+```python
+from vkworkspace import Scheduler
+
+scheduler = Scheduler()
+
+@scheduler.interval(seconds=300)
+async def check_cpu(bot):
+    cpu = await get_cpu_usage()
+    if cpu > 90:
+        await bot.send_text(ONCALL_CHAT, f"CPU: {cpu}%")
+
+@scheduler.daily(hour=9, minute=0)
+async def morning_report(bot):
+    await bot.send_text(TEAM_CHAT, build_report())
+
+@scheduler.weekly(weekday=4, hour=18)  # Friday 18:00
+async def weekly_summary(bot):
+    await bot.send_text(TEAM_CHAT, build_weekly())
+
+# Start in on_startup hook
+@dp.on_startup
+async def setup():
+    scheduler.start(bot, db=oracle_pool, config=app_config)
+    # Jobs receive only kwargs matching their signature:
+    # check_cpu(bot) gets bot only
+    # A job with def report(bot, db): gets bot + db
+
+@dp.on_shutdown
+async def teardown():
+    await scheduler.stop()
+```
+
+### Decorator Options
+
+```python
+@scheduler.interval(seconds=60)           # every 60s, runs immediately
+@scheduler.interval(seconds=60, run_at_start=False)  # waits 60s first
+@scheduler.daily(hour=9, minute=30)       # daily at 09:30 (local time)
+@scheduler.weekly(weekday=0, hour=8)      # Monday 08:00
+```
+
+### DI — Extra Dependencies
+
+```python
+# scheduler.start() accepts **kwargs — injected by parameter name
+scheduler.start(bot, db=pool, config=cfg)
+
+@scheduler.interval(seconds=300)
+async def job(bot, db):        # gets bot + db (config filtered out)
+    ...
+
+@scheduler.interval(seconds=300)
+async def job(bot, **kwargs):  # gets bot + all extras (db, config)
+    ...
+```
+
+---"""
+
+
+REDIS_LISTENER = """\
+
+## RedisListener — Consume Tasks from Redis
+
+Listen for tasks via Redis Streams. For non-Python producers that push
+jobs into Redis for the bot to process.
+
+```python
+from vkworkspace import RedisListener, Router, F
+from vkworkspace.filters import Command
+from vkworkspace.types import Message
+
+router = Router()
+listener = RedisListener(
+    redis_url="redis://localhost:6379",
+    stream="bot:tasks",             # Redis Stream key
+    group="bot-workers",            # consumer group
+    consumer="worker-1",            # consumer name
+)
+
+@listener.on_task("send_message")
+async def handle_send(bot, data: dict):
+    await bot.send_text(data["chat_id"], data["text"])
+
+@listener.on_task("send_file")
+async def handle_file(bot, data: dict):
+    await bot.send_file(data["chat_id"], file_id=data["file_id"])
+
+# Combine with bot handlers
+listener.include_router(router)
+listener.run(token="TOKEN", api_url="https://myteam.mail.ru/bot/v1")
+```
+
+### Producer Side (any language)
+
+```bash
+# Add task to Redis Stream
+redis-cli XADD bot:tasks '*' type send_message chat_id user@corp.ru text "Hello!"
+```
+
+---"""
+
+
+RUN_SYNC = """\
+
+## run_sync — Blocking Code in Async Handlers
+
+Run synchronous / blocking functions (database queries, pandas, file I/O)
+without blocking the event loop. Pure stdlib, zero dependencies.
+
+```python
+from vkworkspace.utils.sync import run_sync, sync_to_async
+
+# 1. Wrap any blocking call
+@router.message(Command("report"))
+async def cmd_report(message: Message):
+    df = await run_sync(pd.read_sql, "SELECT * FROM sales", conn)
+    await message.answer(f"Rows: {len(df)}")
+
+# 2. Decorator — converts sync function to async
+@sync_to_async
+def heavy_query(db, month: str) -> list[dict]:
+    return db.execute(
+        "SELECT * FROM kpi WHERE month = :m", {"m": month}
+    ).fetchall()
+
+@router.message(Command("kpi"))
+async def cmd_kpi(message: Message, db):
+    rows = await heavy_query(db, "2026-01")
+    await message.answer(format_kpi(rows))
+```
+
+### When to Use
+
+- **cx_Oracle / psycopg2** — synchronous DB drivers
+- **pandas** — `read_sql`, `to_excel`, `DataFrame` operations
+- **openpyxl / xlsxwriter** — Excel generation
+- **subprocess** — calling external commands
+- Any function that blocks for >50 ms
 
 ---"""
 
@@ -1220,7 +1507,7 @@ def section_key_imports() -> str:
 ## Key Imports
 
 ```python
-from vkworkspace import Bot, BotServer, Dispatcher, Router, F, BaseMiddleware
+from vkworkspace import Bot, BotServer, Dispatcher, RedisListener, Router, Scheduler, F, BaseMiddleware
 from vkworkspace.types import Message, CallbackQuery, InputFile
 from vkworkspace.filters import Command, CallbackData, CallbackDataFactory, ChatTypeFilter
 from vkworkspace.filters.state import StateFilter
@@ -1232,6 +1519,8 @@ from vkworkspace.utils.paginator import Paginator, PaginationCB
 from vkworkspace.utils.actions import typing_action, ChatActionSender
 from vkworkspace.utils.text import html, md, Text, Bold, Italic, Code, Link, split_text
 from vkworkspace.utils.format_builder import FormatBuilder
+from vkworkspace.utils.sync import run_sync, sync_to_async
+from vkworkspace.utils.scheduler import Scheduler
 from vkworkspace.enums import ButtonStyle, ChatAction, ParseMode, ChatType
 ```"""
 
@@ -1268,6 +1557,9 @@ def generate() -> str:
         ERROR_HANDLING,
         THREADS,
         BOT_SERVER,
+        REDIS_LISTENER,
+        SCHEDULER,
+        RUN_SYNC,
         section_enums(all_enums),
         section_types(types_list),
         COMPLETE_EXAMPLE,

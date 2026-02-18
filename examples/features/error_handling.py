@@ -3,7 +3,7 @@ Error handling bot — demonstrates @router.error(), lifecycle hooks,
 and handle_edited_as_message.
 
 Usage:
-    python examples/error_handling_bot.py
+    python examples/features/error_handling.py
 """
 
 import asyncio

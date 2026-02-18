@@ -54,6 +54,7 @@ class Bot:
     VK Teams Bot API client.
 
     All methods are async and use httpx.AsyncClient under the hood.
+    Supports ``async with`` for automatic session cleanup.
 
     Usage::
 
@@ -71,6 +72,12 @@ class Bot:
                   proxy="http://proxy-server:8535")
         # Only Bot API requests go through the proxy.
         # Your other httpx clients (e.g. requests to 83.166.254.26:8000) are NOT affected.
+
+    Context manager (recommended for FastAPI / background tasks)::
+
+        async with Bot(token="TOKEN", api_url="...") as bot:
+            await bot.send_text("user@corp.ru", "Hello!")
+        # bot.close() called automatically
     """
 
     def __init__(
@@ -133,6 +140,12 @@ class Bot:
     async def close(self) -> None:
         if self._session and not self._session.is_closed:
             await self._session.aclose()
+
+    async def __aenter__(self) -> Bot:
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        await self.close()
 
     # ── internal helpers ──────────────────────────────────────────────
 

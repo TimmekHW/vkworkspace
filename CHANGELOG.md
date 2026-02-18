@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.0] - 2026-02-18
+
+### Fixed
+- **CWE-209**: `BotServer` HTTP 500 response no longer leaks exception details — was `str(exc)`, now generic `"internal server error"`
+- `Scheduler.stop()` is now `async` — properly awaits task cancellation with `asyncio.gather` instead of sync cancel
+- Double `Scheduler.start()` calls are safely ignored with a warning (was silently duplicating tasks)
+- `await scheduler.stop()` in chatops and report examples (was sync call on async method)
+
+### Added
+- `Scheduler` exported from root package: `from vkworkspace import Scheduler`
+- `Scheduler` exported from `vkworkspace.utils`: `from vkworkspace.utils import Scheduler`
+- 14 tests for Scheduler (`test_scheduler.py`): time calculations, lifecycle, DI injection, exception resilience
+- `examples/README.md` — learning path, feature/integration tables with links
+- `SOLAR_REVIEW.md` — security review of SOLAR appScreener SAST report (15 false positives documented)
+- `gen_llm_ref.py`: Scheduler and RedisListener documentation sections
+- `llm_full.md` regenerated (884 → 1177 lines) — added Error Handling & Lifecycle, Threads, run_sync, Custom Filters, Proxy & Rate Limiting sections
+
+### Changed
+- Examples reorganized into `examples/features/` (10 files) and `examples/integrations/` (6 files) with `echo_bot.py` at root
+- Moved `api_capabilities_test.py` and `diagnostic_bot.py` to `scripts/`
+- Fixed all ruff errors in examples: unused `noqa` directives, f-strings without placeholders, unsorted imports, `E402` suppressed for intentional late imports
+
 ## [1.7.0] - 2026-02-18
 
 ### Added
@@ -163,6 +185,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Inline keyboard builder utility
 - 10 example bots (echo, keyboard, FSM, middleware, proxy, diagnostic, API tester, etc.)
 
+[1.8.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.7.0...v1.8.0
+[1.7.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/TimmekHW/vkworkspace/compare/v1.4.0...v1.4.1

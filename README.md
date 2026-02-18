@@ -765,18 +765,29 @@ The live test sends real messages, tests all endpoints, and cleans up after itse
 
 ## Examples
 
+**[Full examples guide](https://github.com/TimmekHW/vkworkspace/blob/main/examples/README.md)**
+
 | Example | Description |
 |---------|-------------|
 | [echo_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/echo_bot.py) | Basic commands + text echo |
-| [keyboard_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/keyboard_bot.py) | Inline keyboards + callback handling |
-| [fsm_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/fsm_bot.py) | Multi-step dialog with FSM + session timeout |
-| [middleware_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/middleware_bot.py) | Custom middleware (logging, access control) |
-| [formatting_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/formatting_bot.py) | MarkdownV2/HTML formatting + Text builder + FormatBuilder |
-| [proxy_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/proxy_bot.py) | Corporate proxy + rate limiter + retry on 5xx + SSL control |
-| [error_handling_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/error_handling_bot.py) | Error handlers, lifecycle hooks, edited message routing |
-| [custom_prefix_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/custom_prefix_bot.py) | Custom command prefixes, regex commands, argument parsing |
-| [multi_router_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/multi_router_bot.py) | Modular sub-routers, chat events, ReplyFilter, ForwardFilter |
-| [event_logger_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/event_logger_bot.py) | Logs all 9 event types to JSONL file |
+| **Features** | |
+| [keyboards.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/features/keyboards.py) | Inline keyboards, callbacks, CallbackDataFactory, pagination |
+| [formatting.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/features/formatting.py) | MarkdownV2/HTML + Text builder + FormatBuilder |
+| [fsm.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/features/fsm.py) | Multi-step dialog with FSM + session timeout |
+| [files.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/features/files.py) | 8 ways to send files + voice conversion |
+| [typing_actions.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/features/typing_actions.py) | Typing indicator: decorator, context manager, one-shot |
+| [middleware.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/features/middleware.py) | Custom middleware (logging, access control) |
+| [multi_router.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/features/multi_router.py) | Modular sub-routers, chat events, ReplyFilter, ForwardFilter |
+| [error_handling.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/features/error_handling.py) | Error handlers, lifecycle hooks, edited message routing |
+| [custom_prefix.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/features/custom_prefix.py) | Custom command prefixes, regex commands, argument parsing |
+| [proxy.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/features/proxy.py) | Corporate proxy + rate limiter + retry on 5xx + SSL control |
+| **Integrations** | |
+| [server_with_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/integrations/server_with_bot.py) | BotServer — HTTP API for non-Python systems |
+| [fastapi_bot.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/integrations/fastapi_bot.py) | Bot inside FastAPI with shared Bot instance and DI |
+| [redis_listener.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/integrations/redis_listener.py) | RedisListener — consume tasks from Redis Streams |
+| [zabbix_alert.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/integrations/zabbix_alert.py) | Zabbix alerts with feedback chain (FSM + BotServer) |
+| [chatops.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/integrations/chatops.py) | ChatOps with RBAC, Scheduler, audit log |
+| [report.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/integrations/report.py) | BI reports: run_sync() for Oracle/pandas, Scheduler |
 
 ## Project Structure
 

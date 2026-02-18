@@ -2,7 +2,7 @@
 Middleware bot — demonstrates custom middleware for logging and access control.
 
 Usage:
-    python examples/middleware_bot.py
+    python examples/features/middleware.py
 """
 
 import asyncio

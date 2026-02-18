@@ -3,7 +3,7 @@ Proxy & rate-limited bot — demonstrates corporate proxy, rate limiting,
 retry on 5xx errors, and SSL verification control.
 
 Usage:
-    python examples/proxy_bot.py
+    python examples/features/proxy.py
 """
 
 import asyncio

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vkworkspace"
-version = "1.7.0"
+version = "1.8.0"
 description = "Fully async framework for building VK Teams (VK Workspace) bots, inspired by aiogram 3"
 readme = "README.md"
 license = { text = "MIT" }
@@ -70,7 +70,8 @@ ignore = ["N818", "RUF001", "RUF002", "RUF003"]
 max-complexity = 12
 
 [tool.ruff.lint.per-file-ignores]
-"examples/*" = ["E501", "C901", "PERF"]
+"examples/**/*" = ["E501", "C901", "PERF"]
+"scripts/*" = ["E501", "C901", "PERF"]
 "tests/*" = ["C901"]
 
 [tool.pyright]

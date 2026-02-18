@@ -19,7 +19,7 @@ Commands:
     /escape   — safe escaping of user input
 
 Usage:
-    python examples/formatting_bot.py
+    python examples/features/formatting.py
 """
 
 import asyncio

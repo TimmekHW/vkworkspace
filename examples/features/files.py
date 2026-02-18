@@ -12,7 +12,7 @@ Commands:
     /voice    — convert MP3/WAV to OGG/Opus and send as voice message
 
 Usage:
-    python examples/file_upload_bot.py
+    python examples/features/files.py
 
 Note:
     /voice requires PyAV: pip install av (or: pip install vkworkspace[voice])

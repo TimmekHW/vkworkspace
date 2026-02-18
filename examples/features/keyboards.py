@@ -7,7 +7,7 @@ Demonstrates:
   /fruits  — paginated list with ◀ / ▶ navigation
 
 Usage:
-    python examples/keyboard_bot.py
+    python examples/features/keyboards.py
 """
 
 import asyncio
