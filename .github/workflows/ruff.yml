@@ -21,6 +21,6 @@ jobs:
     - name: Set up Python
       run: uv python install 3.13
     - name: Install dependencies
-      run: uv venv && uv pip install -e ".[dev]"
+      run: uv venv && uv pip install -e ".[dev,redis]"
     - name: Check types with pyright
       run: uv run pyright vkworkspace/
