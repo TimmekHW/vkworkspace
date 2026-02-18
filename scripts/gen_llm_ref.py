@@ -1,14 +1,272 @@
+#!/usr/bin/env python3
+# ruff: noqa: E501
+"""Generate llm_full.md — comprehensive LLM reference for vkworkspace.
+
+Reads source files, extracts public API (methods, types, enums),
+and assembles a single Markdown reference that any LLM can use
+to write VK Teams bots without reading the docs.
+
+Usage:
+    python scripts/gen_llm_ref.py
+"""
+
+from __future__ import annotations
+
+import ast
+import re
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+SRC = ROOT / "vkworkspace"
+EXAMPLES_DIR = ROOT / "examples"
+OUTPUT = ROOT / "llm_full.md"
+
+
+# ── Extractors ────────────────────────────────────────────────────────
+
+
+def get_version() -> str:
+    """Read __version__ from __meta__.py."""
+    text = (SRC / "__meta__.py").read_text(encoding="utf-8")
+    m = re.search(r'__version__\s*=\s*"([^"]+)"', text)
+    return m.group(1) if m else "0.0.0"
+
+
+def _first_line_docstring(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+    """Extract the first line of a function/method docstring."""
+    ds = ast.get_docstring(node)
+    if not ds:
+        return ""
+    return ds.split("\n")[0].strip()
+
+
+def _extract_endpoint(docstring: str) -> str:
+    """Extract API endpoint from docstring like 'Send text. ``messages/sendText``'."""
+    m = re.search(r"``([a-zA-Z]+/[a-zA-Z/.]+)``", docstring)
+    return m.group(1) if m else ""
+
+
+def _return_annotation(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+    """Get return type annotation as string."""
+    if node.returns is None:
+        return ""
+    return ast.unparse(node.returns)
+
+
+_SKIP_BOT_METHODS = {"get_session", "close", "get_events"}
+
+# Fallback endpoints for methods whose docstrings lack ``endpoint`` markup
+_ENDPOINT_FALLBACK: dict[str, str] = {
+    "answer_callback_query": "messages/answerCallbackQuery",
+}
+
+
+def extract_bot_methods() -> list[dict[str, str]]:
+    """Parse bot.py → public async methods with name, endpoint, description, return type."""
+    tree = ast.parse((SRC / "client" / "bot.py").read_text(encoding="utf-8"))
+    methods: list[dict[str, str]] = []
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef) or node.name != "Bot":
+            continue
+        for item in node.body:
+            if not isinstance(item, ast.AsyncFunctionDef):
+                continue
+            if item.name.startswith("_") or item.name in _SKIP_BOT_METHODS:
+                continue
+
+            doc = _first_line_docstring(item)
+            endpoint = _extract_endpoint(doc) or _ENDPOINT_FALLBACK.get(item.name, "")
+            # Strip endpoint from description
+            desc = re.sub(r"\s*``[^`]+``\s*", "", doc).strip().rstrip(".")
+            ret = _return_annotation(item)
+
+            methods.append({
+                "name": item.name,
+                "endpoint": endpoint,
+                "description": desc,
+                "return": ret,
+            })
+    return methods
+
+
+def extract_bot_init_params() -> list[dict[str, str]]:
+    """Extract Bot.__init__ parameters with defaults."""
+    tree = ast.parse((SRC / "client" / "bot.py").read_text(encoding="utf-8"))
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef) or node.name != "Bot":
+            continue
+        for item in node.body:
+            if not isinstance(item, ast.FunctionDef) or item.name != "__init__":
+                continue
+            params: list[dict[str, str]] = []
+            args = item.args
+            # Skip 'self'
+            all_args = args.args[1:]
+            defaults_offset = len(all_args) - len(args.defaults)
+            for i, arg in enumerate(all_args):
+                name = arg.arg
+                ann = ast.unparse(arg.annotation) if arg.annotation else ""
+                default_idx = i - defaults_offset
+                default = ""
+                if default_idx >= 0 and default_idx < len(args.defaults):
+                    default = ast.unparse(args.defaults[default_idx])
+                params.append({"name": name, "type": ann, "default": default})
+            return params
+    return []
+
+
+def extract_send_text_params() -> list[dict[str, str]]:
+    """Extract send_text parameters."""
+    tree = ast.parse((SRC / "client" / "bot.py").read_text(encoding="utf-8"))
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef) or node.name != "Bot":
+            continue
+        for item in node.body:
+            if not isinstance(item, ast.AsyncFunctionDef) or item.name != "send_text":
+                continue
+            params: list[dict[str, str]] = []
+            args = item.args
+            all_args = args.args[1:]  # skip self
+            defaults_offset = len(all_args) - len(args.defaults)
+            for i, arg in enumerate(all_args):
+                name = arg.arg
+                ann = ast.unparse(arg.annotation) if arg.annotation else ""
+                default_idx = i - defaults_offset
+                default = ""
+                if default_idx >= 0 and default_idx < len(args.defaults):
+                    raw = ast.unparse(args.defaults[default_idx])
+                    if raw != "_UNSET":
+                        default = raw
+                params.append({"name": name, "type": ann, "default": default})
+            return params
+    return []
+
+
+def extract_router_observers() -> list[dict[str, str]]:
+    """Extract event observer names and comments from router.py."""
+    tree = ast.parse((SRC / "dispatcher" / "router.py").read_text(encoding="utf-8"))
+
+    # Get observer descriptions from the docstring
+    descriptions: dict[str, str] = {
+        "message": "any message",
+        "edited_message": "edited messages",
+        "deleted_message": "deleted messages",
+        "callback_query": "inline button presses",
+        "new_chat_members": "user joined",
+        "left_chat_members": "user left",
+        "pinned_message": "message pinned",
+        "unpinned_message": "message unpinned",
+        "changed_chat_info": "chat info changed",
+        "error": "unhandled exceptions",
+    }
+
+    observers: list[dict[str, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef) or node.name != "Router":
+            continue
+        for item in node.body:
+            if not isinstance(item, ast.FunctionDef) or item.name != "__init__":
+                continue
+            for stmt in item.body:
+                if not isinstance(stmt, ast.Assign):
+                    continue
+                for target in stmt.targets:
+                    if not isinstance(target, ast.Attribute):
+                        continue
+                    name = target.attr
+                    if name in descriptions:
+                        observers.append({
+                            "name": name,
+                            "description": descriptions[name],
+                        })
+    return observers
+
+
+def extract_enum_members(filename: str) -> list[dict[str, str]]:
+    """Extract enum class members from a file."""
+    tree = ast.parse((SRC / "enums" / filename).read_text(encoding="utf-8"))
+    members: list[dict[str, str]] = []
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for item in node.body:
+            if isinstance(item, ast.Assign):
+                for target in item.targets:
+                    if isinstance(target, ast.Name):
+                        val = ast.unparse(item.value) if item.value else ""
+                        members.append({"name": target.id, "value": val})
+    return members
+
+
+def extract_all_enums() -> dict[str, list[dict[str, str]]]:
+    """Extract all enum classes with their members."""
+    enum_files = [
+        ("ChatAction", "chat_action.py"),
+        ("ChatType", "chat_type.py"),
+        ("ParseMode", "parse_mode.py"),
+        ("EventType", "event_type.py"),
+        ("ButtonStyle", "button_style.py"),
+        ("PartType", "part_type.py"),
+        ("StyleType", "style_type.py"),
+    ]
+    result: dict[str, list[dict[str, str]]] = {}
+    for class_name, filename in enum_files:
+        result[class_name] = extract_enum_members(filename)
+    return result
+
+
+def extract_types_exports() -> list[str]:
+    """Get all exported type names from types/__init__.py."""
+    tree = ast.parse((SRC / "types" / "__init__.py").read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if (
+                    isinstance(target, ast.Name)
+                    and target.id == "__all__"
+                    and isinstance(node.value, ast.List)
+                ):
+                    return [
+                        ast.literal_eval(elt)
+                        for elt in node.value.elts
+                    ]
+    return []
+
+
+def extract_example_docs() -> list[dict[str, str]]:
+    """Extract example filenames and their module docstrings."""
+    examples: list[dict[str, str]] = []
+    for path in sorted(EXAMPLES_DIR.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        doc = ast.get_docstring(tree) or ""
+        first_line = doc.split("\n")[0].strip() if doc else path.stem.replace("_", " ")
+        examples.append({"filename": path.name, "description": first_line})
+    return examples
+
+
+# ── Template sections ─────────────────────────────────────────────────
+
+
+def section_header(version: str) -> str:
+    return f"""\
 # vkworkspace — Complete LLM Reference
 
 > Async Python framework for VK Teams (VK Workspace) bots, inspired by aiogram 3.
-> Version 1.7.0 · Python 3.11+ · `pip install vkworkspace`
+> Version {version} · Python 3.11+ · `pip install vkworkspace`
 
 **Этот файл — полная справка по фреймворку vkworkspace.**
 Отдайте его целиком в ChatGPT, Claude или любую другую LLM и попросите написать бота — модель сможет использовать все возможности фреймворка без дополнительной документации.
 
 > Пример промпта: *«Вот справка по фреймворку vkworkspace (llm_full.md). Напиши бота, который принимает номер договора и возвращает список документов из базы данных.»*
 
----
+---"""
+
+
+QUICK_START = """\
 
 ## Quick Start
 
@@ -38,78 +296,125 @@ async def main():
 asyncio.run(main())
 ```
 
----
+---"""
+
+
+def section_bot(
+    init_params: list[dict[str, str]],
+    methods: list[dict[str, str]],
+    send_text_params: list[dict[str, str]],
+) -> str:
+    # Param descriptions (static, curated)
+    param_comments: dict[str, str] = {
+        "token": "Bot token from MetaBot",
+        "api_url": "on-premise URL",
+        "timeout": "HTTP timeout in seconds",
+        "poll_time": "long-poll timeout",
+        "rate_limit": "max req/sec (token-bucket), None = unlimited",
+        "proxy": "corporate proxy URL",
+        "parse_mode": "default for all messages",
+        "retry_on_5xx": "auto-retry on server errors",
+        "verify_ssl": "False for self-signed certs",
+    }
+
+    ctor_display_lines = ["bot = Bot("]
+    for p in init_params:
+        comment = param_comments.get(p["name"], "")
+        default = p["default"]
+        if not default:
+            line = f'    {p["name"]}="TOKEN_FROM_METABOT",'
+        else:
+            val = default.replace("'", '"')
+            line = f"    {p['name']}={val},"
+        if comment:
+            line += f"  # {comment}"
+        ctor_display_lines.append(line)
+    ctor_display_lines.append(")")
+    ctor_display = "\n".join(ctor_display_lines)
+
+    # Methods table
+    table_lines = ["| Method | API Endpoint | Description |"]
+    table_lines.append("|--------|-------------|-------------|")
+    for m in methods:
+        name = m["name"]
+        endpoint = m["endpoint"]
+        desc = m["description"]
+        ret = m["return"]
+        ret_str = f" → `{ret}`" if ret else ""
+        ep_str = f"`{endpoint}`" if endpoint else ""
+        table_lines.append(f"| `await bot.{name}(...)`{ret_str} | {ep_str} | {desc} |")
+    methods_table = "\n".join(table_lines)
+
+    # send_text params
+    st_lines = ["await bot.send_text("]
+    st_comments: dict[str, str] = {
+        "chat_id": "target chat ID",
+        "text": "message text",
+        "reply_msg_id": "reply to message",
+        "forward_chat_id": "forward from",
+        "forward_msg_id": "forward message ID",
+        "inline_keyboard_markup": "inline keyboard",
+        "parse_mode": '"HTML" / "MarkdownV2" / None',
+        "format_": "offset/length formatting",
+        "parent_topic": "send in thread",
+        "request_id": "idempotency key",
+    }
+    for p in send_text_params:
+        comment = st_comments.get(p["name"], "")
+        default = p["default"]
+        if p["name"] == "chat_id":
+            val = '"user@company.ru"'
+        elif p["name"] == "text":
+            val = '"Hello!"'
+        elif default:
+            val = default.replace("'", '"')
+        else:
+            val = "..."
+        line = f"    {p['name']}={val},"
+        if comment:
+            line += f"  # {comment}"
+        st_lines.append(line)
+    st_lines.append(")")
+    send_text_display = "\n".join(st_lines)
+
+    return f"""\
 
 ## Bot — API Client
 
 ```python
 from vkworkspace import Bot
 
-bot = Bot(
-    token="TOKEN_FROM_METABOT",  # Bot token from MetaBot
-    api_url="https://api.icq.net/bot/v1",  # on-premise URL
-    timeout=30.0,  # HTTP timeout in seconds
-    poll_time=60,  # long-poll timeout
-    rate_limit=None,  # max req/sec (token-bucket), None = unlimited
-    proxy=None,  # corporate proxy URL
-    parse_mode=None,  # default for all messages
-    retry_on_5xx=3,  # auto-retry on server errors
-    verify_ssl=True,  # False for self-signed certs
-)
+{ctor_display}
 ```
 
 ### Bot Methods
 
-| Method | API Endpoint | Description |
-|--------|-------------|-------------|
-| `await bot.get_me(...)` → `BotInfo` | `self/get` | Get bot's own info |
-| `await bot.send_text(...)` → `APIResponse` | `messages/sendText` | Send a text message |
-| `await bot.send_text_with_deeplink(...)` → `APIResponse` | `messages/sendTextWithDeeplink` | Send text with deeplink |
-| `await bot.edit_text(...)` → `APIResponse` | `messages/editText` | Edit message text |
-| `await bot.delete_messages(...)` → `APIResponse` | `messages/deleteMessages` | Delete messages |
-| `await bot.send_file(...)` → `APIResponse` | `messages/sendFile` | Send a file or image |
-| `await bot.send_voice(...)` → `APIResponse` | `messages/sendVoice` | Send a voice message |
-| `await bot.answer_callback_query(...)` → `APIResponse` | `messages/answerCallbackQuery` | Answer a callback query (inline button press) |
-| `await bot.get_chat_info(...)` → `ChatInfo` | `chats/getInfo` | Get chat info |
-| `await bot.get_chat_admins(...)` → `list[ChatMember]` | `chats/getAdmins` | Get chat admins |
-| `await bot.get_chat_members(...)` → `dict[str, Any]` | `chats/getMembers` | Get chat members |
-| `await bot.get_blocked_users(...)` → `list[User]` | `chats/getBlockedUsers` | Get blocked users |
-| `await bot.get_pending_users(...)` → `list[User]` | `chats/getPendingUsers` | Get pending users |
-| `await bot.block_user(...)` → `APIResponse` | `chats/blockUser` | Block user |
-| `await bot.unblock_user(...)` → `APIResponse` | `chats/unblockUser` | Unblock user |
-| `await bot.resolve_pending(...)` → `APIResponse` | `chats/resolvePending` | Resolve pending join requests |
-| `await bot.set_chat_title(...)` → `APIResponse` | `chats/setTitle` | Set chat title |
-| `await bot.set_chat_about(...)` → `APIResponse` | `chats/setAbout` | Set chat description |
-| `await bot.set_chat_rules(...)` → `APIResponse` | `chats/setRules` | Set chat rules |
-| `await bot.delete_chat_members(...)` → `APIResponse` | `chats/members/delete` | Remove members from chat |
-| `await bot.add_chat_members(...)` → `APIResponse` | `chats/members/add` | Add members to chat |
-| `await bot.set_chat_avatar(...)` → `APIResponse` | `chats/avatar/set` | Set chat avatar |
-| `await bot.send_actions(...)` → `APIResponse` | `chats/sendActions` | Send chat actions (typing, looking) |
-| `await bot.pin_message(...)` → `APIResponse` | `chats/pinMessage` | Pin a message |
-| `await bot.unpin_message(...)` → `APIResponse` | `chats/unpinMessage` | Unpin a message |
-| `await bot.get_file_info(...)` → `File` | `files/getInfo` | Get file info |
-| `await bot.threads_get_subscribers(...)` → `ThreadSubscribers` | `threads/subscribers/get` | Get thread subscribers |
-| `await bot.threads_autosubscribe(...)` → `APIResponse` | `threads/autosubscribe` | Toggle thread autosubscribe |
-| `await bot.threads_add(...)` → `Thread` | `threads/add` | Create thread from message |
+{methods_table}
 
 ### send_text Parameters
 
 ```python
-await bot.send_text(
-    chat_id="user@company.ru",  # target chat ID
-    text="Hello!",  # message text
-    reply_msg_id=None,  # reply to message
-    forward_chat_id=None,  # forward from
-    forward_msg_id=None,  # forward message ID
-    inline_keyboard_markup=None,  # inline keyboard
-    parse_mode=...,  # "HTML" / "MarkdownV2" / None
-    format_=None,  # offset/length formatting
-    parent_topic=None,  # send in thread
-    request_id=None,  # idempotency key
-)
+{send_text_display}
 ```
 
----
+---"""
+
+
+def section_dispatcher(observers: list[dict[str, str]]) -> str:
+    decorator_lines = []
+    for obs in observers:
+        name = obs["name"]
+        desc = obs["description"]
+        # Add example filter for message
+        if name == "message":
+            decorator_lines.append(f'@router.{name}()                    # {desc}')
+            decorator_lines.append(f'@router.{name}(Command("start"))    # /start command')
+            decorator_lines.append(f"@router.{name}(F.text)              # messages with text")
+        else:
+            decorator_lines.append(f"@router.{name}(){' ' * max(1, 25 - len(name))}# {desc}")
+    decorators = "\n".join(decorator_lines)
+
+    return f"""\
 
 ## Dispatcher & Router
 
@@ -146,21 +451,13 @@ await dp.start_polling(bot)
 ```python
 router = Router()
 
-@router.message()                    # any message
-@router.message(Command("start"))    # /start command
-@router.message(F.text)              # messages with text
-@router.edited_message()           # edited messages
-@router.deleted_message()          # deleted messages
-@router.pinned_message()           # message pinned
-@router.unpinned_message()         # message unpinned
-@router.new_chat_members()         # user joined
-@router.left_chat_members()        # user left
-@router.changed_chat_info()        # chat info changed
-@router.callback_query()           # inline button presses
-@router.error()                    # unhandled exceptions
+{decorators}
 ```
 
----
+---"""
+
+
+FILTERS = """\
 
 ## Filters
 
@@ -187,7 +484,7 @@ from vkworkspace.filters.message_parts import ReplyFilter, ForwardFilter
 ```python
 @router.message(Command("start"))              # /start
 @router.message(Command("help", "info"))       # /help OR /info
-@router.message(Command(re.compile(r"cmd_\d+")))  # regex
+@router.message(Command(re.compile(r"cmd_\\d+")))  # regex
 @router.message(Command("menu", prefix=("!", "/")))  # !menu or /menu
 @router.message(Command())                     # any command
 
@@ -209,11 +506,11 @@ async def greet(message: Message, command: CommandObject):
 @router.message(StateFilter(Form.waiting_name))
 
 # Regex
-@router.message(RegexpFilter(r"\d{4}-\d{2}-\d{2}"))  # date pattern
+@router.message(RegexpFilter(r"\\d{4}-\\d{2}-\\d{2}"))  # date pattern
 
 # Callback data (exact or regex)
 @router.callback_query(CallbackData("confirm"))
-@router.callback_query(CallbackData(re.compile(r"^action_\d+$")))
+@router.callback_query(CallbackData(re.compile(r"^action_\\d+$")))
 
 # Reply / Forward
 @router.message(ReplyFilter())     # message is a reply
@@ -225,7 +522,10 @@ async def greet(message: Message, command: CommandObject):
 @router.message(~Command("start"))                             # NOT
 ```
 
----
+---"""
+
+
+MESSAGE_OBJECT = """\
 
 ## Message Object
 
@@ -270,7 +570,10 @@ async def handler(message: Message):
     await message.answer(result)
 ```
 
----
+---"""
+
+
+CALLBACK_QUERY = """\
 
 ## CallbackQuery Object
 
@@ -291,7 +594,10 @@ async def on_confirm(query: CallbackQuery):
         await query.message.edit_text("Updated!")
 ```
 
----
+---"""
+
+
+KEYBOARDS = """\
 
 ## Inline Keyboards
 
@@ -317,7 +623,10 @@ ButtonStyle.PRIMARY    # blue (default)
 ButtonStyle.ATTENTION  # red
 ```
 
----
+---"""
+
+
+CALLBACK_DATA_FACTORY = """\
 
 ## CallbackDataFactory — Typed Callback Data
 
@@ -355,7 +664,10 @@ class MyCB(CallbackDataFactory, prefix="my", sep="|"):
 # MyCB(field="val").pack() → "my|val"
 ```
 
----
+---"""
+
+
+PAGINATOR = """\
 
 ## Paginator — Keyboard Pagination
 
@@ -403,7 +715,10 @@ p.nav_buttons() # list of InlineKeyboardButton (◀, 1/3, ▶)
 p.add_nav_row(builder)  # appends nav row to builder
 ```
 
----
+---"""
+
+
+FSM = """\
 
 ## FSM — Finite State Machine
 
@@ -467,7 +782,10 @@ dp = Dispatcher(storage=RedisStorage(url="redis://localhost:6379"))
 dp = Dispatcher(storage=MemoryStorage(), session_timeout=300)  # 5 min
 ```
 
----
+---"""
+
+
+MIDDLEWARE = """\
 
 ## Middleware
 
@@ -514,7 +832,10 @@ async def get_data(message: Message, api):  # `api` auto-injected
     await message.answer(str(result))
 ```
 
----
+---"""
+
+
+TYPING_ACTIONS = """\
 
 ## Typing Actions
 
@@ -553,7 +874,10 @@ async def cmd_ping(message: Message):
     await message.answer("pong!")
 ```
 
----
+---"""
+
+
+TEXT_FORMATTING = """\
 
 ## Text Formatting
 
@@ -574,7 +898,7 @@ md.code("x = 1")              # `x = 1`
 
 # Text builder (auto-escaping, composable)
 content = Text(
-    Bold("Welcome"), ", ", Italic("user"), "!\n",
+    Bold("Welcome"), ", ", Italic("user"), "!\\n",
     "Click ", Link("here", "https://example.com"),
 )
 await message.answer(**content.as_kwargs())  # auto parse_mode
@@ -600,7 +924,10 @@ fb.link("our site", "https://example.com")
 await bot.send_text(chat_id, fb.text, format_=fb.build())
 ```
 
----
+---"""
+
+
+FILE_HANDLING = """\
 
 ## File Handling
 
@@ -612,7 +939,7 @@ await bot.send_file(chat_id, file=InputFile("report.pdf"))
 await bot.send_file(chat_id, file=InputFile(Path("/tmp/photo.jpg")))
 
 # From bytes
-await bot.send_file(chat_id, file=InputFile(b"\x89PNG...", filename="image.png"))
+await bot.send_file(chat_id, file=InputFile(b"\\x89PNG...", filename="image.png"))
 
 # From URL (async download)
 photo = await InputFile.from_url("https://http.cat/200.jpg")
@@ -634,7 +961,10 @@ await message.answer_file(file=InputFile("doc.pdf"), caption="Here!")
 await message.answer_voice(file=InputFile(ogg, filename="voice.ogg"))
 ```
 
----
+---"""
+
+
+ERROR_HANDLING = """\
 
 ## Error Handling
 
@@ -646,7 +976,10 @@ async def on_error(error: Exception, bot, raw_event, **kwargs):
     await bot.send_text("admin@corp.ru", f"Bot error: {error}")
 ```
 
----
+---"""
+
+
+THREADS = """\
 
 ## Threads
 
@@ -663,7 +996,10 @@ if message.is_thread_message:
     ...
 ```
 
----
+---"""
+
+
+BOT_SERVER = """\
 
 ## BotServer — HTTP Service for Non-Python Integrations
 
@@ -741,48 +1077,57 @@ dp.include_router(router)
 asyncio.create_task(dp.start_polling(bot))  # runs in background
 ```
 
----
+---"""
 
-## Enums
 
-```python
-from vkworkspace.enums import (
-    ChatAction,
-    ChatType,
-    ParseMode,
-    EventType,
-    ButtonStyle,
-    PartType,
-    StyleType,
-)
-```
+def section_enums(all_enums: dict[str, list[dict[str, str]]]) -> str:
+    lines = ["\n## Enums\n\n```python\nfrom vkworkspace.enums import ("]
+    lines.extend(f"    {class_name}," for class_name in all_enums)
+    lines.append(")\n```\n")
 
-- **ChatAction**: TYPING, LOOKING
-- **ChatType**: PRIVATE, GROUP, CHANNEL
-- **ParseMode**: MARKDOWNV2, HTML
-- **ButtonStyle**: BASE, PRIMARY, ATTENTION
-- **StyleType**: BOLD, ITALIC, UNDERLINE, STRIKETHROUGH, LINK, MENTION, INLINE_CODE, PRE, ORDERED_LIST, UNORDERED_LIST, QUOTE
+    # Show values for key enums
+    show_values = ["ChatAction", "ChatType", "ParseMode", "ButtonStyle", "StyleType"]
+    for class_name in show_values:
+        members = all_enums.get(class_name, [])
+        if members:
+            vals = ", ".join(m["name"] for m in members)
+            lines.append(f"- **{class_name}**: {vals}")
 
----
+    lines.append("\n---")
+    return "\n".join(lines)
 
-## Types Reference
 
-| Type | Module | Key Fields |
-|------|--------|------------|
-| `Message` | `vkworkspace.types` | msg_id, text, chat, from_user, parts, format, parent_topic |
-| `CallbackQuery` | `vkworkspace.types` | query_id, callback_data, from_user, message |
-| `Chat` | `vkworkspace.types` | chat_id, type, title |
-| `Contact` | `vkworkspace.types.user` | user_id, first_name, last_name, nick |
-| `ChatInfo` | `vkworkspace.types` | type, title, about, rules, is_public |
-| `InputFile` | `vkworkspace.types` | file, filename; from_url(), from_base64() |
-| `APIResponse` | `vkworkspace.types` | ok, msg_id, file_id |
-| `Part` | `vkworkspace.types.message` | type, payload; as_mention, as_reply, as_forward, as_file |
-| `FormatSpan` | `vkworkspace.types.message` | offset, length, url |
-| `ParentMessage` | `vkworkspace.types.message` | chat_id, message_id, type |
+def section_types(types_list: list[str]) -> str:
+    # Curated table with key fields (static — changes rarely)
+    curated: dict[str, tuple[str, str]] = {
+        "Message": ("vkworkspace.types", "msg_id, text, chat, from_user, parts, format, parent_topic"),
+        "CallbackQuery": ("vkworkspace.types", "query_id, callback_data, from_user, message"),
+        "Chat": ("vkworkspace.types", "chat_id, type, title"),
+        "Contact": ("vkworkspace.types.user", "user_id, first_name, last_name, nick"),
+        "ChatInfo": ("vkworkspace.types", "type, title, about, rules, is_public"),
+        "InputFile": ("vkworkspace.types", "file, filename; from_url(), from_base64()"),
+        "APIResponse": ("vkworkspace.types", "ok, msg_id, file_id"),
+        "Part": ("vkworkspace.types.message", "type, payload; as_mention, as_reply, as_forward, as_file"),
+        "FormatSpan": ("vkworkspace.types.message", "offset, length, url"),
+        "ParentMessage": ("vkworkspace.types.message", "chat_id, message_id, type"),
+    }
 
-Other exported types: `BotInfo`, `Button`, `ChangedChatInfoEvent`, `ChatMember`, `File`, `FilePayload`, `ForwardPayload`, `LeftChatMembersEvent`, `MentionPayload`, `MessageFormat`, `NewChatMembersEvent`, `Photo`, `ReplyMessagePayload`, `ReplyPayload`, `Subscriber`, `Thread`, `ThreadSubscribers`, `Update`, `User`
+    lines = ["\n## Types Reference\n"]
+    lines.append("| Type | Module | Key Fields |")
+    lines.append("|------|--------|------------|")
+    for name, (module, fields) in curated.items():
+        lines.append(f"| `{name}` | `{module}` | {fields} |")
 
----
+    # List any exported types not in the curated table
+    extra = [t for t in types_list if t not in curated and t != "VKTeamsObject"]
+    if extra:
+        lines.append(f"\nOther exported types: {', '.join(f'`{t}`' for t in extra)}")
+
+    lines.append("\n---")
+    return "\n".join(lines)
+
+
+COMPLETE_EXAMPLE = """\
 
 ## Complete Example: Multi-Step Order Bot
 
@@ -829,7 +1174,7 @@ async def on_select(query: CallbackQuery, callback_data: OrderCB, state: FSMCont
 
     if query.message:
         await query.message.edit_text(
-            f"Order: {product}\nConfirm?",
+            f"Order: {product}\\nConfirm?",
             inline_keyboard_markup=builder.as_markup(),
         )
     await query.answer()
@@ -854,7 +1199,10 @@ async def main():
 asyncio.run(main())
 ```
 
----
+---"""
+
+
+INSTALLATION = """\
 
 ## Installation
 
@@ -863,7 +1211,11 @@ pip install vkworkspace                # core
 pip install vkworkspace[redis]         # + Redis FSM storage
 pip install vkworkspace[voice]         # + audio conversion (PyAV)
 pip install vkworkspace[all]           # everything
-```
+```"""
+
+
+def section_key_imports() -> str:
+    return """\
 
 ## Key Imports
 
@@ -881,4 +1233,57 @@ from vkworkspace.utils.actions import typing_action, ChatActionSender
 from vkworkspace.utils.text import html, md, Text, Bold, Italic, Code, Link, split_text
 from vkworkspace.utils.format_builder import FormatBuilder
 from vkworkspace.enums import ButtonStyle, ChatAction, ParseMode, ChatType
-```
+```"""
+
+
+# ── Main ──────────────────────────────────────────────────────────────
+
+
+def generate() -> str:
+    """Assemble all sections into the final reference."""
+    version = get_version()
+    bot_init = extract_bot_init_params()
+    bot_methods = extract_bot_methods()
+    send_text_params = extract_send_text_params()
+    observers = extract_router_observers()
+    all_enums = extract_all_enums()
+    types_list = extract_types_exports()
+
+    sections = [
+        section_header(version),
+        QUICK_START,
+        section_bot(bot_init, bot_methods, send_text_params),
+        section_dispatcher(observers),
+        FILTERS,
+        MESSAGE_OBJECT,
+        CALLBACK_QUERY,
+        KEYBOARDS,
+        CALLBACK_DATA_FACTORY,
+        PAGINATOR,
+        FSM,
+        MIDDLEWARE,
+        TYPING_ACTIONS,
+        TEXT_FORMATTING,
+        FILE_HANDLING,
+        ERROR_HANDLING,
+        THREADS,
+        BOT_SERVER,
+        section_enums(all_enums),
+        section_types(types_list),
+        COMPLETE_EXAMPLE,
+        INSTALLATION,
+        section_key_imports(),
+    ]
+
+    return "\n".join(sections) + "\n"
+
+
+def main() -> None:
+    text = generate()
+    OUTPUT.write_text(text, encoding="utf-8")
+    line_count = text.count("\n")
+    print(f"Generated {OUTPUT.name} ({len(text):,} chars, {line_count} lines)")
+
+
+if __name__ == "__main__":
+    main()

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.0] - 2026-02-18
+
+### Added
+- `BotServer` — HTTP server for running bots as HTTP services: `@server.route()` decorator, GET/POST, JSON parsing, `X-Api-Key` auth, built-in `/health` endpoint
+- `BotServer.include_router()` — run HTTP server + VK Teams long-polling in a single process via `asyncio.gather`
+- `BotServer.run()` / `BotServer.start()` — blocking and async entry points
+- `BotServer` exported from root package: `from vkworkspace import BotServer`
+- `server_with_bot.py` example — HTTP routes + FSM incident-bot in one process
+- `scripts/gen_llm_ref.py` — auto-generates `llm_full.md` from source (AST-parsed Bot methods, enums, types, router observers)
+- `llm_full.md` mention in README and README_RU
+
 ## [1.6.0] - 2026-02-18
 
 ### Added

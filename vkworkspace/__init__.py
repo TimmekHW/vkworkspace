@@ -23,11 +23,13 @@ from vkworkspace.client.bot import Bot
 from vkworkspace.dispatcher.dispatcher import Dispatcher
 from vkworkspace.dispatcher.middlewares.base import BaseMiddleware
 from vkworkspace.dispatcher.router import Router
+from vkworkspace.server import BotServer
 from vkworkspace.utils.magic_filter import F
 
 __all__ = [
     "BaseMiddleware",
     "Bot",
+    "BotServer",
     "Dispatcher",
     "F",
     "Router",
