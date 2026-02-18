@@ -12,6 +12,8 @@
 
 > **[README in English](https://github.com/TimmekHW/vkworkspace/blob/main/README.md)**
 
+> **🤖 Разработка с помощью LLM:** Отправьте файл [`llm_full.md`](https://github.com/TimmekHW/vkworkspace/blob/main/llm_full.md) любой LLM (ChatGPT, Claude, Gemini и др.) — она узнает весь API фреймворка и сможет писать хендлеры, клавиатуры, FSM-диалоги, middleware и многое другое без чтения документации.
+
 ## Оглавление
 
 - [vkworkspace vs mailru-im-bot](#vkworkspace-vs-mailru-im-bot)

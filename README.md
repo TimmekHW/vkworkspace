@@ -12,6 +12,8 @@ A modern replacement for the official [mail-ru-im/bot-python](https://github.com
 
 > **[README на русском языке](https://github.com/TimmekHW/vkworkspace/blob/main/README_RU.md)**
 
+> **🤖 LLM-Assisted Development:** Feed [`llm_full.md`](https://github.com/TimmekHW/vkworkspace/blob/main/llm_full.md) to any LLM (ChatGPT, Claude, Gemini, etc.) and it will know the entire framework API — write handlers, keyboards, FSM dialogs, middleware, and more without reading the docs.
+
 ## Table of Contents
 
 - [vkworkspace vs mailru-im-bot](#vkworkspace-vs-mailru-im-bot)
