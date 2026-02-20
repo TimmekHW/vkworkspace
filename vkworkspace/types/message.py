@@ -224,10 +224,13 @@ class Message(VKTeamsObject):
         parse_mode: ParseMode | str | None = _UNSET,
         inline_keyboard_markup: Any = None,
         **kwargs: Any,
-    ) -> Any:
+    ) -> Message:
         """Send a text message to the same chat.
 
         If this message is from a thread, the reply stays in the same thread.
+
+        Returns a bound :class:`Message` — you can call ``.delete()``,
+        ``.edit_text()``, etc. on it directly.
 
         Args:
             text: Message text.
@@ -239,6 +242,11 @@ class Message(VKTeamsObject):
 
             await message.answer("Got it!")
             await message.answer("*Bold*", parse_mode="MarkdownV2")
+
+            # Delete the sent message after a delay:
+            sent = await message.answer("I will vanish in 5 seconds")
+            await asyncio.sleep(5)
+            await sent.delete()
         """
         if parse_mode is not _UNSET:
             kwargs["parse_mode"] = parse_mode
@@ -247,11 +255,14 @@ class Message(VKTeamsObject):
         # If this message is from a thread, reply stays in the same thread
         if self.parent_topic is not None and "parent_topic" not in kwargs:
             kwargs["parent_topic"] = self.parent_topic
-        return await self.bot.send_text(
+        resp = await self.bot.send_text(
             chat_id=self.chat.chat_id,
             text=text,
             **kwargs,
         )
+        sent = Message(msg_id=resp.msg_id or "", chat=self.chat, text=text)
+        sent.set_bot(self.bot)
+        return sent
 
     async def answer_thread(
         self,
@@ -259,10 +270,11 @@ class Message(VKTeamsObject):
         parse_mode: ParseMode | str | None = _UNSET,
         inline_keyboard_markup: Any = None,
         **kwargs: Any,
-    ) -> Any:
+    ) -> Message:
         """Create a thread under this message and post *text* into it.
 
         If this message already lives in a thread, posts there instead.
+        Returns a bound :class:`Message` — supports ``.delete()``, ``.edit_text()``.
         """
         if parse_mode is not _UNSET:
             kwargs["parse_mode"] = parse_mode
@@ -276,12 +288,15 @@ class Message(VKTeamsObject):
                 messageId=int(self.msg_id) if self.msg_id.isdigit() else 0,
                 type="thread",
             )
-        return await self.bot.send_text(
+        resp = await self.bot.send_text(
             chat_id=self.chat.chat_id,
             text=text,
             parent_topic=pt,
             **kwargs,
         )
+        sent = Message(msg_id=resp.msg_id or "", chat=self.chat, text=text)
+        sent.set_bot(self.bot)
+        return sent
 
     async def reply(
         self,
@@ -289,8 +304,10 @@ class Message(VKTeamsObject):
         parse_mode: ParseMode | str | None = _UNSET,
         inline_keyboard_markup: Any = None,
         **kwargs: Any,
-    ) -> Any:
+    ) -> Message:
         """Reply with a quote — shows the original message above the response.
+
+        Returns a bound :class:`Message` — supports ``.delete()``, ``.edit_text()``.
 
         Args:
             text: Reply text.
@@ -305,12 +322,15 @@ class Message(VKTeamsObject):
             kwargs["parse_mode"] = parse_mode
         if inline_keyboard_markup is not None:
             kwargs["inline_keyboard_markup"] = inline_keyboard_markup
-        return await self.bot.send_text(
+        resp = await self.bot.send_text(
             chat_id=self.chat.chat_id,
             text=text,
             reply_msg_id=self.msg_id,
             **kwargs,
         )
+        sent = Message(msg_id=resp.msg_id or "", chat=self.chat, text=text)
+        sent.set_bot(self.bot)
+        return sent
 
     async def delete(self) -> Any:
         """Delete this message from the chat."""
@@ -424,8 +444,10 @@ class Message(VKTeamsObject):
         parse_mode: ParseMode | str | None = _UNSET,
         inline_keyboard_markup: Any = None,
         **kwargs: Any,
-    ) -> Any:
+    ) -> Message:
         """Send a file/image to the same chat.
+
+        Returns a bound :class:`Message` — supports ``.delete()``.
 
         Args:
             file_id: ID of a previously uploaded file (no re-upload).
@@ -440,13 +462,16 @@ class Message(VKTeamsObject):
             kwargs["parse_mode"] = parse_mode
         if inline_keyboard_markup is not None:
             kwargs["inline_keyboard_markup"] = inline_keyboard_markup
-        return await self.bot.send_file(
+        resp = await self.bot.send_file(
             chat_id=self.chat.chat_id,
             file_id=file_id,
             file=file,
             caption=caption,
             **kwargs,
         )
+        sent = Message(msg_id=resp.msg_id or "", chat=self.chat, text=caption)
+        sent.set_bot(self.bot)
+        return sent
 
     async def answer_voice(
         self,
@@ -454,8 +479,10 @@ class Message(VKTeamsObject):
         file: Any = None,
         inline_keyboard_markup: Any = None,
         **kwargs: Any,
-    ) -> Any:
+    ) -> Message:
         """Send a voice message to the same chat.
+
+        Returns a bound :class:`Message` — supports ``.delete()``.
 
         Recommended format: OGG/Opus. Convert with
         ``vkworkspace.utils.voice.convert_to_ogg_opus()`` if needed.
@@ -471,9 +498,12 @@ class Message(VKTeamsObject):
         """
         if inline_keyboard_markup is not None:
             kwargs["inline_keyboard_markup"] = inline_keyboard_markup
-        return await self.bot.send_voice(
+        resp = await self.bot.send_voice(
             chat_id=self.chat.chat_id,
             file_id=file_id,
             file=file,
             **kwargs,
         )
+        sent = Message(msg_id=resp.msg_id or "", chat=self.chat)
+        sent.set_bot(self.bot)
+        return sent

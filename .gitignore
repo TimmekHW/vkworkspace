@@ -28,3 +28,4 @@ bench_report*.txt
 *.jsonl
 .claude/
 docs/*
+PRESENTATION.md

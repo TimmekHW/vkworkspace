@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.1] - 2026-02-20
+
+### Added
+- `message.answer()`, `reply()`, `answer_thread()`, `answer_file()`, `answer_voice()` now return a bound `Message` instead of `Any` — enables chaining `.delete()`, `.edit_text()` on the sent message directly
+- `examples/echo_bot.py`: added `/vanish` command demonstrating `sent = await message.answer(...); await sent.delete()`
+
+### Changed
+- `PRESENTATION.md` added to `.gitignore` — kept out of public repository
+
 ## [1.8.0] - 2026-02-18
 
 ### Fixed

@@ -31,6 +31,13 @@ async def cmd_help(message: Message) -> None:
     )
 
 
+@router.message(Command("vanish"))
+async def cmd_vanish(message: Message) -> None:
+    sent = await message.answer("I will vanish in 5 seconds...")
+    await asyncio.sleep(5)
+    await sent.delete()
+
+
 @router.message(F.text)
 async def echo(message: Message) -> None:
     assert message.text is not None  # guaranteed by F.text filter
