@@ -260,7 +260,7 @@ class Message(VKTeamsObject):
             text=text,
             **kwargs,
         )
-        sent = Message(msg_id=resp.msg_id or "", chat=self.chat, text=text)
+        sent = Message.model_construct(msg_id=resp.msg_id or "", chat=self.chat, text=text)
         sent.set_bot(self.bot)
         return sent
 
@@ -294,7 +294,7 @@ class Message(VKTeamsObject):
             parent_topic=pt,
             **kwargs,
         )
-        sent = Message(msg_id=resp.msg_id or "", chat=self.chat, text=text)
+        sent = Message.model_construct(msg_id=resp.msg_id or "", chat=self.chat, text=text)
         sent.set_bot(self.bot)
         return sent
 
@@ -328,7 +328,7 @@ class Message(VKTeamsObject):
             reply_msg_id=self.msg_id,
             **kwargs,
         )
-        sent = Message(msg_id=resp.msg_id or "", chat=self.chat, text=text)
+        sent = Message.model_construct(msg_id=resp.msg_id or "", chat=self.chat, text=text)
         sent.set_bot(self.bot)
         return sent
 
@@ -469,7 +469,7 @@ class Message(VKTeamsObject):
             caption=caption,
             **kwargs,
         )
-        sent = Message(msg_id=resp.msg_id or "", chat=self.chat, text=caption)
+        sent = Message.model_construct(msg_id=resp.msg_id or "", chat=self.chat, text=caption)
         sent.set_bot(self.bot)
         return sent
 
@@ -504,6 +504,6 @@ class Message(VKTeamsObject):
             file=file,
             **kwargs,
         )
-        sent = Message(msg_id=resp.msg_id or "", chat=self.chat)
+        sent = Message.model_construct(msg_id=resp.msg_id or "", chat=self.chat)
         sent.set_bot(self.bot)
         return sent

@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.2] - 2026-02-20
+
+### Fixed
+- `message.answer()` / `reply()` / `answer_thread()` / `answer_file()` / `answer_voice()`: use `model_construct()` instead of `Message(msg_id=...)` — fixes pyright `reportCallIssue` (alias `msgId` vs field name `msg_id`)
+
 ## [1.8.1] - 2026-02-20
 
 ### Added
