@@ -1532,6 +1532,101 @@ from vkworkspace.enums import ButtonStyle, ChatAction, ParseMode, ChatType
 ```"""
 
 
+# ── VK Teams API Quirks (verified via live event logging) ─────────────
+
+VK_TEAMS_QUIRKS = """\
+---
+
+## VK Teams API Quirks
+
+Verified behaviours discovered via live event logging. Not in official docs.
+
+### Inline keyboard is echoed back in callbackQuery
+
+When a button is pressed, VK Teams includes the **full keyboard markup** in the
+`callbackQuery` event inside `message.parts[0]` (`type == "inlineKeyboardMarkup"`).
+Use `message.inline_keyboard` to read it without storing it separately:
+
+```python
+@router.callback_query()
+async def on_cb(cq: CallbackQuery):
+    kbd = cq.message.inline_keyboard if cq.message else None
+    # kbd = [[{"text": "...", "callbackData": "...", "style": "..."}], ...]
+```
+
+### URL buttons do NOT fire callbackQuery — confirmed
+
+Buttons with `url=` open a browser link but send **absolutely no event to the bot**.
+Verified: raw event logger (which catches every server response before routing)
+recorded complete silence for 24+ seconds while URL button was pressed repeatedly.
+
+```python
+builder.button(text="Open site", url="https://example.com")  # bot sees nothing
+builder.button(text="Action", callback_data="action:do")      # fires callbackQuery
+```
+
+Do not mix `url=` and `callback_data=` on the same button expecting both to work —
+`url=` silently wins and no callback is sent.
+
+### callbackQuery.message.from_user = bot, not user
+
+`message.from_user` inside `callbackQuery` is the **bot** that sent the keyboard.
+The **user who pressed the button** is `callbackQuery.from_user`.
+
+### queryId format
+
+`SVR:{user_id}:{bot_id}:{unix_ms}:{seq}-{unix_s}`
+
+### Thread architecture
+
+Each thread gets its own chat ID (`thread_id` from `threads/add`).
+Thread messages arrive as `newMessage` with `parent_topic` set:
+
+- `message.chat.chat_id` = thread's own chat ID (NOT original group/channel)
+- `message.thread_root_chat_id` = original chat ID
+- `message.thread_root_message_id` = root message ID (int)
+- `parent_topic.type` = `"message"` (not `"thread"`)
+- `message.answer()` replies into the thread
+
+### Channel comments = thread messages (automatic)
+
+Bot added to a channel automatically receives all post comments as `newMessage`
+with `is_thread_message == True` — no subscription needed.
+
+### deletedMessage only fires in private chats
+
+Group/channel deletions are invisible to bots.
+In private chats: proper `deletedMessage` + ghost `newMessage` (same `msgId`,
+`editedTimestamp` set, `text=None`, `is_edited=True`).
+
+```python
+@router.message(F.is_edited == False)  # guard against ghost delete events
+async def on_msg(message: Message): ...
+```
+
+### File with caption — text field absent
+
+Single file with caption: `text=None`, use `message.caption` or `message.content`.
+Multi-file with caption: caption bleeds into `text` mixed with file URLs.
+
+### Forward — no top-level text
+
+`message.text = None`. Content in `message.forwards[0].text`.
+
+### Reactions and admin actions not exposed
+
+Emoji reactions, admin grant/revoke/block send no bot events.
+
+### Private chat chatId == userId
+
+`message.chat.chat_id` in private chat equals the other user's email-like ID.
+
+### threads/subscribers/get — Bad request
+
+Fails even with a valid `thread_id` from `threads/add`. Do not rely on it.
+"""
+
+
 # ── Main ──────────────────────────────────────────────────────────────
 
 
@@ -1572,6 +1667,7 @@ def generate() -> str:
         COMPLETE_EXAMPLE,
         INSTALLATION,
         section_key_imports(),
+        VK_TEAMS_QUIRKS,
     ]
 
     return "\n".join(sections) + "\n"

@@ -30,3 +30,4 @@ bench_report*.txt
 docs/*
 PRESENTATION.md
 scripts/full_test_bot.py
+scripts/button_test.py

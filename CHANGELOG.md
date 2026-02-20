@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.4] - 2026-02-20
+
+### Added
+- `Part.as_inline_keyboard` — reads keyboard markup from parts (VK Teams echoes the full keyboard back in `callbackQuery` events)
+- `Message.inline_keyboard` — shortcut to current keyboard on the message without storing it separately
+- `llm_full.md` / `gen_llm_ref.py`: "VK Teams API Quirks" section — verified API behaviours from live event logging (keyboard echo, URL buttons fire no events, `from_user` in callback is the bot, ghost-delete in private chats, thread architecture, channel comments)
+
 ## [1.8.3] - 2026-02-20
 
 ### Added

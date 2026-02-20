@@ -108,12 +108,48 @@ class FilePayload(VKTeamsObject):
 class Part(VKTeamsObject):
     """A single part of a message (mention, reply, forward, file, sticker, etc.).
 
-    Use ``.as_mention``, ``.as_reply``, ``.as_forward``, ``.as_file``
-    properties to parse the raw payload into typed objects.
+    Use ``.as_mention``, ``.as_reply``, ``.as_forward``, ``.as_file``,
+    ``.as_inline_keyboard`` properties to parse the raw payload into typed objects.
+
+    Known ``type`` values:
+        - ``"mention"`` — @mention
+        - ``"reply"`` — reply/quote
+        - ``"forward"`` — forwarded message
+        - ``"file"`` / ``"image"`` — file or image attachment
+        - ``"sticker"`` — sticker
+        - ``"voice"`` — voice message
+        - ``"inlineKeyboardMarkup"`` — inline keyboard (echoed in callbackQuery events)
     """
 
     type: str = ""
     payload: Any = Field(default_factory=dict)
+
+    @property
+    def as_inline_keyboard(self) -> list[list[dict[str, str]]] | None:
+        """Return the inline keyboard markup if type == "inlineKeyboardMarkup".
+
+        VK Teams echoes the full keyboard back inside ``callbackQuery`` events
+        (in ``callbackQuery.message.parts``).  Use this to read the current
+        keyboard state without storing it separately.
+
+        Returns:
+            Keyboard as ``list[list[dict]]`` (rows of buttons), or ``None``.
+
+        Example::
+
+            @router.callback_query()
+            async def on_cb(cq: CallbackQuery):
+                if cq.message:
+                    for part in cq.message.parts:
+                        kbd = part.as_inline_keyboard
+                        if kbd:
+                            print("Current keyboard rows:", len(kbd))
+        """
+        if self.type != "inlineKeyboardMarkup":
+            return None
+        if isinstance(self.payload, list):
+            return self.payload
+        return None
 
     @property
     def as_mention(self) -> MentionPayload | None:
@@ -246,6 +282,27 @@ class Message(VKTeamsObject):
         return self.parent_topic.message_id if self.parent_topic else None
 
     # ── Convenience accessors for parts ───────────────────────────
+
+    @property
+    def inline_keyboard(self) -> list[list[dict[str, str]]] | None:
+        """Current inline keyboard markup attached to this message, or ``None``.
+
+        VK Teams echoes the full keyboard back in ``callbackQuery`` events
+        inside ``message.parts``.  Useful for editing keyboards after a button press.
+
+        Example::
+
+            @router.callback_query()
+            async def on_cb(cq: CallbackQuery):
+                kbd = cq.message.inline_keyboard if cq.message else None
+                if kbd:
+                    print("rows:", len(kbd), "first row:", kbd[0])
+        """
+        for p in self.parts:
+            kbd = p.as_inline_keyboard
+            if kbd is not None:
+                return kbd
+        return None
 
     @property
     def mentions(self) -> list[MentionPayload]:
