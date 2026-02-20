@@ -54,9 +54,7 @@ class _AndFilter(BaseFilter):
         self._right = right
 
     async def __call__(self, event: Any, **kwargs: Any) -> bool:
-        return bool(await self._left(event, **kwargs)) and bool(
-            await self._right(event, **kwargs)
-        )
+        return bool(await self._left(event, **kwargs)) and bool(await self._right(event, **kwargs))
 
 
 class _OrFilter(BaseFilter):
@@ -65,6 +63,4 @@ class _OrFilter(BaseFilter):
         self._right = right
 
     async def __call__(self, event: Any, **kwargs: Any) -> bool:
-        return bool(await self._left(event, **kwargs)) or bool(
-            await self._right(event, **kwargs)
-        )
+        return bool(await self._left(event, **kwargs)) or bool(await self._right(event, **kwargs))

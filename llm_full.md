@@ -1,7 +1,7 @@
 # vkworkspace — Complete LLM Reference
 
 > Async Python framework for VK Teams (VK Workspace) bots, inspired by aiogram 3.
-> Version 1.7.0 · Python 3.11+ · `pip install vkworkspace`
+> Version 1.8.2 · Python 3.11+ · `pip install vkworkspace`
 
 **Этот файл — полная справка по фреймворку vkworkspace.**
 Отдайте его целиком в ChatGPT, Claude или любую другую LLM и попросите написать бота — модель сможет использовать все возможности фреймворка без дополнительной документации.
@@ -152,7 +152,8 @@ bot = Bot(
     verify_ssl=False,          # self-signed certs on on-premise
 )
 
-# Rate limiting: max 5 requests/sec (token-bucket)
+# Rate limiting: token-bucket, burst=5 by default
+# rate_limit=5 → sustained 5 req/sec, allows up to 5 back-to-back before throttling
 bot = Bot(token="TOKEN", api_url="...", rate_limit=5)
 
 # Auto-retry on 5xx errors (default: 3 retries with exponential backoff)
@@ -347,17 +348,27 @@ async def handler(message: Message):
     message.reply_to        # ReplyMessagePayload | None
     message.forwards        # list[ReplyMessagePayload]
     message.files           # list[FilePayload]
+    message.caption         # str | None — caption from file part (VK Teams hides it in parts)
+    message.content         # str | None — text or caption, whichever is set
+    message.is_edited       # bool — True if editedTimestamp is set
+    message.sticker         # FilePayload | None — sticker attachment
+    message.voice           # FilePayload | None — voice attachment
+    message.is_thread_message       # bool — True if inside a thread
+    message.thread_root_chat_id     # str | None — original chat ID for thread messages
+    message.thread_root_message_id  # int | None — root message ID for thread messages
 
-    # Actions
-    await message.answer("text")              # reply in same chat
-    await message.reply("quoted reply")       # reply with quote
-    await message.answer_thread("in thread")  # create/reply in thread
+    # Actions — answer/reply/answer_file/answer_voice return a bound Message
+    # so you can chain .delete() / .edit_text() on the result
+    sent = await message.answer("text")       # reply in same chat → Message
+    await sent.delete()                       # delete the sent message
+    await message.reply("quoted reply")       # reply with quote → Message
+    await message.answer_thread("in thread")  # create/reply in thread → Message
     await message.edit_text("new text")       # edit this message
     await message.delete()                    # delete this message
     await message.pin()                       # pin
     await message.unpin()                     # unpin
-    await message.answer_file(file=InputFile("doc.pdf"))
-    await message.answer_voice(file=InputFile(ogg_bytes, filename="voice.ogg"))
+    await message.answer_file(file=InputFile("doc.pdf"))   # → Message
+    await message.answer_voice(file=InputFile(ogg_bytes, filename="voice.ogg"))  # → Message
     await message.answer_chat_action()        # one-shot "typing..."
 
     # Typing indicator while processing

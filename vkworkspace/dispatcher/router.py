@@ -151,9 +151,7 @@ class Router:
 
         return await wrapped(event, kwargs)
 
-    def on_startup(
-        self, callback: Callable[..., Any] | None = None
-    ) -> Any:
+    def on_startup(self, callback: Callable[..., Any] | None = None) -> Any:
         """Register a startup hook. Runs before polling starts.
 
         Can be used as a decorator or called directly::
@@ -175,9 +173,7 @@ class Router:
 
         return decorator
 
-    def on_shutdown(
-        self, callback: Callable[..., Any] | None = None
-    ) -> Any:
+    def on_shutdown(self, callback: Callable[..., Any] | None = None) -> Any:
         """Register a shutdown hook. Runs after polling stops.
 
         Example::

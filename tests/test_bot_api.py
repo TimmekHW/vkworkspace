@@ -3,6 +3,7 @@
 Every public method of ``Bot`` is tested against a mocked HTTP transport
 (``httpx.MockTransport``) — no real network calls are made.
 """
+
 from __future__ import annotations
 
 import io
@@ -29,6 +30,7 @@ TOKEN = "test-token-001"
 
 
 # ── helpers ────────────────────────────────────────────────────────────
+
 
 def _ok(**extra: Any) -> dict[str, Any]:
     """Build a successful API response dict."""
@@ -62,6 +64,7 @@ def _bot_with(responses: dict[str, dict[str, Any]], **kwargs: Any) -> Bot:
 
 # ── fixtures ───────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def ok_bot() -> Bot:
     """Bot that returns ``{"ok": true}`` for any endpoint."""
@@ -75,18 +78,21 @@ def ok_bot() -> Bot:
 
 # ── self/get ───────────────────────────────────────────────────────────
 
+
 class TestGetMe:
     async def test_returns_bot_info(self):
-        bot = _bot_with({
-            "self/get": _ok(
-                userId="bot@example.com",
-                nick="testbot",
-                firstName="Test",
-                lastName="Bot",
-                about="I am a test bot",
-                photo=[{"url": "https://example.com/photo.png"}],
-            ),
-        })
+        bot = _bot_with(
+            {
+                "self/get": _ok(
+                    userId="bot@example.com",
+                    nick="testbot",
+                    firstName="Test",
+                    lastName="Bot",
+                    about="I am a test bot",
+                    photo=[{"url": "https://example.com/photo.png"}],
+                ),
+            }
+        )
         result = await bot.get_me()
         assert isinstance(result, BotInfo)
         assert result.user_id == "bot@example.com"
@@ -100,14 +106,19 @@ class TestGetMe:
 
 # ── events/get ─────────────────────────────────────────────────────────
 
+
 class TestGetEvents:
     async def test_returns_updates(self):
-        bot = _bot_with({
-            "events/get": _ok(events=[
-                {"eventId": 1, "type": "newMessage", "payload": {"msgId": "m1"}},
-                {"eventId": 2, "type": "editedMessage", "payload": {"msgId": "m2"}},
-            ]),
-        })
+        bot = _bot_with(
+            {
+                "events/get": _ok(
+                    events=[
+                        {"eventId": 1, "type": "newMessage", "payload": {"msgId": "m1"}},
+                        {"eventId": 2, "type": "editedMessage", "payload": {"msgId": "m2"}},
+                    ]
+                ),
+            }
+        )
         events = await bot.get_events()
         assert len(events) == 2
         assert all(isinstance(e, Update) for e in events)
@@ -117,12 +128,16 @@ class TestGetEvents:
         await bot.close()
 
     async def test_tracks_last_event_id(self):
-        bot = _bot_with({
-            "events/get": _ok(events=[
-                {"eventId": 10, "type": "newMessage", "payload": {}},
-                {"eventId": 15, "type": "newMessage", "payload": {}},
-            ]),
-        })
+        bot = _bot_with(
+            {
+                "events/get": _ok(
+                    events=[
+                        {"eventId": 10, "type": "newMessage", "payload": {}},
+                        {"eventId": 15, "type": "newMessage", "payload": {}},
+                    ]
+                ),
+            }
+        )
         await bot.get_events()
         assert bot._last_event_id == 15
         await bot.close()
@@ -136,11 +151,14 @@ class TestGetEvents:
 
 # ── messages/sendText ──────────────────────────────────────────────────
 
+
 class TestSendText:
     async def test_basic(self):
-        bot = _bot_with({
-            "messages/sendText": _ok(msgId="msg-123"),
-        })
+        bot = _bot_with(
+            {
+                "messages/sendText": _ok(msgId="msg-123"),
+            }
+        )
         result = await bot.send_text("chat@test", "Hello!")
         assert isinstance(result, APIResponse)
         assert result.ok is True
@@ -162,7 +180,8 @@ class TestSendText:
     async def test_with_forward(self):
         bot = _bot_with({"messages/sendText": _ok(msgId="m1")})
         result = await bot.send_text(
-            "chat@test", "fwd",
+            "chat@test",
+            "fwd",
             forward_chat_id="other@chat",
             forward_msg_id="fwd-1",
         )
@@ -178,7 +197,8 @@ class TestSendText:
     async def test_with_parent_topic_dict(self):
         bot = _bot_with({"messages/sendText": _ok(msgId="m1")})
         result = await bot.send_text(
-            "chat@test", "thread msg",
+            "chat@test",
+            "thread msg",
             parent_topic={"chatId": "chat@test", "messageId": 999, "type": "thread"},
         )
         assert result.ok is True
@@ -186,9 +206,13 @@ class TestSendText:
 
     async def test_with_parent_topic_object(self):
         bot = _bot_with({"messages/sendText": _ok(msgId="m1")})
-        pt = ParentMessage.model_validate({
-            "chatId": "chat@test", "messageId": 42, "type": "thread",
-        })
+        pt = ParentMessage.model_validate(
+            {
+                "chatId": "chat@test",
+                "messageId": 42,
+                "type": "thread",
+            }
+        )
         result = await bot.send_text("chat@test", "thread msg", parent_topic=pt)
         assert result.ok is True
         await bot.close()
@@ -219,30 +243,39 @@ class TestSendText:
 
 # ── messages/sendTextWithDeeplink ──────────────────────────────────────
 
+
 class TestSendTextWithDeeplink:
     async def test_basic(self):
-        bot = _bot_with({
-            "messages/sendTextWithDeeplink": _ok(msgId="dl-1"),
-        })
+        bot = _bot_with(
+            {
+                "messages/sendTextWithDeeplink": _ok(msgId="dl-1"),
+            }
+        )
         result = await bot.send_text_with_deeplink("chat@test", "Hi", deeplink="start_payload")
         assert isinstance(result, APIResponse)
         assert result.msg_id == "dl-1"
         await bot.close()
 
     async def test_with_keyboard_and_parse_mode(self):
-        bot = _bot_with({
-            "messages/sendTextWithDeeplink": _ok(msgId="dl-2"),
-        })
+        bot = _bot_with(
+            {
+                "messages/sendTextWithDeeplink": _ok(msgId="dl-2"),
+            }
+        )
         kb = [[{"text": "Open", "url": "https://example.com"}]]
         result = await bot.send_text_with_deeplink(
-            "chat@test", "<b>Hello</b>", deeplink="ref123",
-            inline_keyboard_markup=kb, parse_mode=ParseMode.HTML,
+            "chat@test",
+            "<b>Hello</b>",
+            deeplink="ref123",
+            inline_keyboard_markup=kb,
+            parse_mode=ParseMode.HTML,
         )
         assert result.ok is True
         await bot.close()
 
 
 # ── messages/editText ──────────────────────────────────────────────────
+
 
 class TestEditText:
     async def test_basic(self):
@@ -261,6 +294,7 @@ class TestEditText:
 
 # ── messages/deleteMessages ────────────────────────────────────────────
 
+
 class TestDeleteMessages:
     async def test_basic(self):
         bot = _bot_with({"messages/deleteMessages": _ok()})
@@ -270,6 +304,7 @@ class TestDeleteMessages:
 
 
 # ── messages/sendFile ──────────────────────────────────────────────────
+
 
 class TestSendFile:
     async def test_by_file_id(self):
@@ -319,6 +354,7 @@ class TestSendFile:
 
 # ── messages/sendVoice ─────────────────────────────────────────────────
 
+
 class TestSendVoice:
     async def test_by_file_id(self):
         bot = _bot_with({"messages/sendVoice": _ok(msgId="v1")})
@@ -342,6 +378,7 @@ class TestSendVoice:
 
 # ── messages/answerCallbackQuery ───────────────────────────────────────
 
+
 class TestAnswerCallbackQuery:
     async def test_basic(self):
         bot = _bot_with({"messages/answerCallbackQuery": _ok()})
@@ -352,7 +389,9 @@ class TestAnswerCallbackQuery:
     async def test_with_text_and_alert(self):
         bot = _bot_with({"messages/answerCallbackQuery": _ok()})
         result = await bot.answer_callback_query(
-            "query-2", text="Done!", show_alert=True,
+            "query-2",
+            text="Done!",
+            show_alert=True,
         )
         assert result.ok is True
         await bot.close()
@@ -366,18 +405,21 @@ class TestAnswerCallbackQuery:
 
 # ── chats/getInfo ──────────────────────────────────────────────────────
 
+
 class TestGetChatInfo:
     async def test_basic(self):
-        bot = _bot_with({
-            "chats/getInfo": _ok(
-                type="group",
-                title="Test Group",
-                nick="testgrp",
-                about="A group",
-                public=True,
-                inviteLink="https://example.com/invite",
-            ),
-        })
+        bot = _bot_with(
+            {
+                "chats/getInfo": _ok(
+                    type="group",
+                    title="Test Group",
+                    nick="testgrp",
+                    about="A group",
+                    public=True,
+                    inviteLink="https://example.com/invite",
+                ),
+            }
+        )
         result = await bot.get_chat_info("chat@test")
         assert isinstance(result, ChatInfo)
         assert result.type == "group"
@@ -387,14 +429,16 @@ class TestGetChatInfo:
         await bot.close()
 
     async def test_with_phone_and_photos(self):
-        bot = _bot_with({
-            "chats/getInfo": _ok(
-                type="private",
-                firstName="John",
-                phone="+79001234567",
-                photos=[{"url": "https://example.com/avatar.jpg"}],
-            ),
-        })
+        bot = _bot_with(
+            {
+                "chats/getInfo": _ok(
+                    type="private",
+                    firstName="John",
+                    phone="+79001234567",
+                    photos=[{"url": "https://example.com/avatar.jpg"}],
+                ),
+            }
+        )
         result = await bot.get_chat_info("user@test")
         assert result.phone == "+79001234567"
         assert len(result.photos) == 1
@@ -404,14 +448,19 @@ class TestGetChatInfo:
 
 # ── chats/getAdmins ────────────────────────────────────────────────────
 
+
 class TestGetChatAdmins:
     async def test_returns_list(self):
-        bot = _bot_with({
-            "chats/getAdmins": _ok(admins=[
-                {"userId": "admin1@test", "creator": True, "admin": True},
-                {"userId": "admin2@test", "creator": False, "admin": True},
-            ]),
-        })
+        bot = _bot_with(
+            {
+                "chats/getAdmins": _ok(
+                    admins=[
+                        {"userId": "admin1@test", "creator": True, "admin": True},
+                        {"userId": "admin2@test", "creator": False, "admin": True},
+                    ]
+                ),
+            }
+        )
         result = await bot.get_chat_admins("chat@test")
         assert len(result) == 2
         assert all(isinstance(m, ChatMember) for m in result)
@@ -429,14 +478,17 @@ class TestGetChatAdmins:
 
 # ── chats/getMembers ───────────────────────────────────────────────────
 
+
 class TestGetChatMembers:
     async def test_returns_raw_dict(self):
-        bot = _bot_with({
-            "chats/getMembers": _ok(
-                members=[{"userId": "u1@test"}, {"userId": "u2@test"}],
-                cursor="next-cursor",
-            ),
-        })
+        bot = _bot_with(
+            {
+                "chats/getMembers": _ok(
+                    members=[{"userId": "u1@test"}, {"userId": "u2@test"}],
+                    cursor="next-cursor",
+                ),
+            }
+        )
         result = await bot.get_chat_members("chat@test")
         assert isinstance(result, dict)
         assert len(result["members"]) == 2
@@ -444,9 +496,11 @@ class TestGetChatMembers:
         await bot.close()
 
     async def test_with_cursor(self):
-        bot = _bot_with({
-            "chats/getMembers": _ok(members=[], cursor=None),
-        })
+        bot = _bot_with(
+            {
+                "chats/getMembers": _ok(members=[], cursor=None),
+            }
+        )
         result = await bot.get_chat_members("chat@test", cursor="abc")
         assert result["ok"] is True
         await bot.close()
@@ -454,13 +508,18 @@ class TestGetChatMembers:
 
 # ── chats/getBlockedUsers ──────────────────────────────────────────────
 
+
 class TestGetBlockedUsers:
     async def test_returns_list(self):
-        bot = _bot_with({
-            "chats/getBlockedUsers": _ok(users=[
-                {"userId": "blocked@test"},
-            ]),
-        })
+        bot = _bot_with(
+            {
+                "chats/getBlockedUsers": _ok(
+                    users=[
+                        {"userId": "blocked@test"},
+                    ]
+                ),
+            }
+        )
         result = await bot.get_blocked_users("chat@test")
         assert len(result) == 1
         assert isinstance(result[0], User)
@@ -470,14 +529,19 @@ class TestGetBlockedUsers:
 
 # ── chats/getPendingUsers ──────────────────────────────────────────────
 
+
 class TestGetPendingUsers:
     async def test_returns_list(self):
-        bot = _bot_with({
-            "chats/getPendingUsers": _ok(users=[
-                {"userId": "pending1@test"},
-                {"userId": "pending2@test"},
-            ]),
-        })
+        bot = _bot_with(
+            {
+                "chats/getPendingUsers": _ok(
+                    users=[
+                        {"userId": "pending1@test"},
+                        {"userId": "pending2@test"},
+                    ]
+                ),
+            }
+        )
         result = await bot.get_pending_users("chat@test")
         assert len(result) == 2
         assert result[0].user_id == "pending1@test"
@@ -485,6 +549,7 @@ class TestGetPendingUsers:
 
 
 # ── chats/blockUser ────────────────────────────────────────────────────
+
 
 class TestBlockUser:
     async def test_basic(self):
@@ -502,6 +567,7 @@ class TestBlockUser:
 
 # ── chats/unblockUser ──────────────────────────────────────────────────
 
+
 class TestUnblockUser:
     async def test_basic(self):
         bot = _bot_with({"chats/unblockUser": _ok()})
@@ -511,6 +577,7 @@ class TestUnblockUser:
 
 
 # ── chats/resolvePending ───────────────────────────────────────────────
+
 
 class TestResolvePending:
     async def test_approve_one(self):
@@ -528,6 +595,7 @@ class TestResolvePending:
 
 # ── chats/setTitle ─────────────────────────────────────────────────────
 
+
 class TestSetChatTitle:
     async def test_basic(self):
         bot = _bot_with({"chats/setTitle": _ok()})
@@ -537,6 +605,7 @@ class TestSetChatTitle:
 
 
 # ── chats/setAbout ─────────────────────────────────────────────────────
+
 
 class TestSetChatAbout:
     async def test_basic(self):
@@ -548,6 +617,7 @@ class TestSetChatAbout:
 
 # ── chats/setRules ─────────────────────────────────────────────────────
 
+
 class TestSetChatRules:
     async def test_basic(self):
         bot = _bot_with({"chats/setRules": _ok()})
@@ -557,6 +627,7 @@ class TestSetChatRules:
 
 
 # ── chats/members/delete ───────────────────────────────────────────────
+
 
 class TestDeleteChatMembers:
     async def test_basic(self):
@@ -568,6 +639,7 @@ class TestDeleteChatMembers:
 
 # ── chats/members/add ──────────────────────────────────────────────────
 
+
 class TestAddChatMembers:
     async def test_basic(self):
         bot = _bot_with({"chats/members/add": _ok()})
@@ -577,6 +649,7 @@ class TestAddChatMembers:
 
 
 # ── chats/avatar/set ───────────────────────────────────────────────────
+
 
 class TestSetChatAvatar:
     async def test_with_bytes(self):
@@ -596,6 +669,7 @@ class TestSetChatAvatar:
 
 # ── chats/sendActions ──────────────────────────────────────────────────
 
+
 class TestSendActions:
     async def test_typing(self):
         bot = _bot_with({"chats/sendActions": _ok()})
@@ -612,6 +686,7 @@ class TestSendActions:
 
 # ── chats/pinMessage ───────────────────────────────────────────────────
 
+
 class TestPinMessage:
     async def test_basic(self):
         bot = _bot_with({"chats/pinMessage": _ok()})
@@ -621,6 +696,7 @@ class TestPinMessage:
 
 
 # ── chats/unpinMessage ─────────────────────────────────────────────────
+
 
 class TestUnpinMessage:
     async def test_basic(self):
@@ -632,17 +708,20 @@ class TestUnpinMessage:
 
 # ── files/getInfo ──────────────────────────────────────────────────────
 
+
 class TestGetFileInfo:
     async def test_basic(self):
-        bot = _bot_with({
-            "files/getInfo": _ok(
-                fileId="file-abc",
-                type="image",
-                size=1024,
-                filename="photo.png",
-                url="https://files.example.com/photo.png",
-            ),
-        })
+        bot = _bot_with(
+            {
+                "files/getInfo": _ok(
+                    fileId="file-abc",
+                    type="image",
+                    size=1024,
+                    filename="photo.png",
+                    url="https://files.example.com/photo.png",
+                ),
+            }
+        )
         result = await bot.get_file_info("file-abc")
         assert isinstance(result, File)
         assert result.file_id == "file-abc"
@@ -655,17 +734,20 @@ class TestGetFileInfo:
 
 # ── threads/subscribers/get ────────────────────────────────────────────
 
+
 class TestThreadsGetSubscribers:
     async def test_basic(self):
-        bot = _bot_with({
-            "threads/subscribers/get": _ok(
-                cursor="cur-1",
-                subscribers=[
-                    {"userId": "u1@test", "firstName": "Alice"},
-                    {"userId": "u2@test", "firstName": "Bob"},
-                ],
-            ),
-        })
+        bot = _bot_with(
+            {
+                "threads/subscribers/get": _ok(
+                    cursor="cur-1",
+                    subscribers=[
+                        {"userId": "u1@test", "firstName": "Alice"},
+                        {"userId": "u2@test", "firstName": "Bob"},
+                    ],
+                ),
+            }
+        )
         result = await bot.threads_get_subscribers("thread-1")
         assert isinstance(result, ThreadSubscribers)
         assert result.cursor == "cur-1"
@@ -674,15 +756,18 @@ class TestThreadsGetSubscribers:
         await bot.close()
 
     async def test_with_pagination(self):
-        bot = _bot_with({
-            "threads/subscribers/get": _ok(cursor=None, subscribers=[]),
-        })
+        bot = _bot_with(
+            {
+                "threads/subscribers/get": _ok(cursor=None, subscribers=[]),
+            }
+        )
         result = await bot.threads_get_subscribers("thread-1", page_size=10, cursor="cur-x")
         assert result.subscribers == []
         await bot.close()
 
 
 # ── threads/autosubscribe ──────────────────────────────────────────────
+
 
 class TestThreadsAutosubscribe:
     async def test_enable(self):
@@ -694,7 +779,9 @@ class TestThreadsAutosubscribe:
     async def test_disable_with_existing(self):
         bot = _bot_with({"threads/autosubscribe": _ok()})
         result = await bot.threads_autosubscribe(
-            "chat@test", enable=False, with_existing=True,
+            "chat@test",
+            enable=False,
+            with_existing=True,
         )
         assert result.ok is True
         await bot.close()
@@ -702,11 +789,14 @@ class TestThreadsAutosubscribe:
 
 # ── threads/add ────────────────────────────────────────────────────────
 
+
 class TestThreadsAdd:
     async def test_basic(self):
-        bot = _bot_with({
-            "threads/add": _ok(threadId="thread-999", msgId="msg-1"),
-        })
+        bot = _bot_with(
+            {
+                "threads/add": _ok(threadId="thread-999", msgId="msg-1"),
+            }
+        )
         result = await bot.threads_add("chat@test", "msg-1")
         assert isinstance(result, Thread)
         assert result.thread_id == "thread-999"
@@ -716,11 +806,14 @@ class TestThreadsAdd:
 
 # ── error handling ─────────────────────────────────────────────────────
 
+
 class TestErrorHandling:
     async def test_api_error_raised(self):
-        bot = _bot_with({
-            "messages/sendText": {"ok": False, "description": "Access denied"},
-        })
+        bot = _bot_with(
+            {
+                "messages/sendText": {"ok": False, "description": "Access denied"},
+            }
+        )
         with pytest.raises(VKTeamsAPIError) as exc_info:
             await bot.send_text("chat@test", "test")
         assert "Access denied" in str(exc_info.value)
@@ -739,6 +832,7 @@ class TestErrorHandling:
 
 
 # ── _params helper ─────────────────────────────────────────────────────
+
 
 class TestParams:
     def test_skips_none(self):
@@ -779,6 +873,7 @@ class TestParams:
 
 # ── _msg_ids helper ────────────────────────────────────────────────────
 
+
 class TestMsgIds:
     def test_none(self):
         assert Bot._msg_ids(None) is None
@@ -798,6 +893,7 @@ class TestMsgIds:
 
 # ── parse_mode resolution ──────────────────────────────────────────────
 
+
 class TestParseModeResolution:
     def test_explicit_overrides_default(self):
         bot = Bot(token=TOKEN, parse_mode="HTML")
@@ -805,6 +901,7 @@ class TestParseModeResolution:
 
     def test_fallback_to_default(self):
         from vkworkspace.client.bot import _UNSET
+
         bot = Bot(token=TOKEN, parse_mode="HTML")
         assert bot._resolve_parse_mode(_UNSET) == "HTML"
 
@@ -814,11 +911,13 @@ class TestParseModeResolution:
 
     def test_no_default_no_explicit(self):
         from vkworkspace.client.bot import _UNSET
+
         bot = Bot(token=TOKEN)
         assert bot._resolve_parse_mode(_UNSET) is None
 
 
 # ── keyboard / format / parent_topic helpers ───────────────────────────
+
 
 class TestHelpers:
     def test_keyboard_json_none(self):
@@ -858,6 +957,7 @@ class TestHelpers:
 
 # ── session / lifecycle ────────────────────────────────────────────────
 
+
 class TestSessionLifecycle:
     async def test_get_session_creates_client(self):
         bot = Bot(token=TOKEN, api_url=API_URL)
@@ -889,6 +989,7 @@ class TestSessionLifecycle:
 
 
 # ── request verification (check endpoint + params are sent) ────────────
+
 
 class TestRequestVerification:
     """Verify that the correct endpoint and parameters are sent."""

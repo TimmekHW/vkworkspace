@@ -33,8 +33,7 @@ async def cmd_start(message: Message) -> None:
 @router.message(Command("help", prefix=("/", "!")))
 async def cmd_help(message: Message, command: CommandObject) -> None:
     await message.answer(
-        f"Help requested with prefix '{command.prefix}'\n"
-        f"Full text: {command.raw_text}"
+        f"Help requested with prefix '{command.prefix}'\nFull text: {command.raw_text}"
     )
 
 

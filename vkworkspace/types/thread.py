@@ -6,8 +6,17 @@ from .base import VKTeamsObject
 
 
 class Thread(VKTeamsObject):
-    thread_id: str = Field(alias="threadId")
+    """Result of ``threads/add``.
+
+    ``thread_id`` is the chat ID of the newly created thread
+    (format: ``XXXXXXXXX@chat.agent``).  Thread messages arrive as
+    ``newMessage`` events with ``chat.chatId == thread_id`` and
+    ``parent_topic.chatId`` pointing back to the original chat.
+    """
+
+    thread_id: str = Field(default="", alias="threadId")
     msg_id: str | None = Field(default=None, alias="msgId")
+    ok: bool = Field(default=False)
 
 
 class Subscriber(VKTeamsObject):

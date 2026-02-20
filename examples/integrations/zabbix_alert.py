@@ -52,20 +52,25 @@ server = BotServer(
 
 # ── FSM: feedback chain after "Взял" ────────────────────────────────
 
+
 class IncidentFlow(StatesGroup):
-    action = State()     # "что делаешь?"
-    eta = State()        # "сколько времени?"
+    action = State()  # "что делаешь?"
+    eta = State()  # "сколько времени?"
 
 
 # ── HTTP: receive Zabbix webhook ─────────────────────────────────────
+
 
 @server.route("/alert")
 async def on_alert(bot: Bot, data: dict):
     """POST /alert — Zabbix sends event data, bot sends alert to chat."""
     event_id = data["event_id"]
     severity_emoji = {
-        "high": "🔴", "average": "🟡", "warning": "🟡",
-        "information": "🔵", "info": "🔵",
+        "high": "🔴",
+        "average": "🟡",
+        "warning": "🟡",
+        "information": "🔵",
+        "info": "🔵",
     }.get(data.get("severity", ""), "⚪")
 
     text = (
@@ -82,7 +87,8 @@ async def on_alert(bot: Bot, data: dict):
     kb.adjust(2, 1)
 
     resp = await bot.send_text(
-        ONCALL_CHAT, text,
+        ONCALL_CHAT,
+        text,
         parse_mode="HTML",
         inline_keyboard_markup=kb.as_markup(),
     )
@@ -155,7 +161,8 @@ async def on_escalate(query: CallbackQuery) -> None:
         # Forward to L2 chat
         if query.message.bot:
             await query.message.bot.send_text(
-                L2_CHAT, f"⚠️ Инцидент #{event_id} эскалирован с L1",
+                L2_CHAT,
+                f"⚠️ Инцидент #{event_id} эскалирован с L1",
             )
 
     await query.answer()
@@ -183,6 +190,7 @@ async def cmd_start(message: Message) -> None:
 
 
 # ── Lifecycle hooks ──────────────────────────────────────────────────
+
 
 @server.on_startup
 async def on_startup():

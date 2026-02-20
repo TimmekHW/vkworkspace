@@ -65,9 +65,7 @@ async def process_age(message: Message, state: FSMContext) -> None:
 
     await state.set_state(RegistrationForm.confirm)
     await message.answer(
-        f"Please confirm your data:\n"
-        f"Name: {data['name']}\n"
-        f"Age: {data['age']}",
+        f"Please confirm your data:\nName: {data['name']}\nAge: {data['age']}",
         inline_keyboard_markup=builder.as_markup(),
     )
 

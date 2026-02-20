@@ -44,6 +44,7 @@ ALERTS_CHAT = "bi-alerts@chat.corp.ru"
 
 # ── Fake Oracle layer (replace with real cx_Oracle / oracledb) ───────
 
+
 class FakeOraclePool:
     """Simulates a synchronous Oracle connection pool.
 
@@ -59,6 +60,7 @@ class FakeOraclePool:
     def query_kpi(self) -> dict[str, Any]:
         """Synchronous — blocks the thread. That's why we use run_sync()."""
         import time
+
         time.sleep(0.5)  # simulate Oracle query latency
         return {
             "revenue": 142_500_000,
@@ -71,6 +73,7 @@ class FakeOraclePool:
     def query_sales(self, month: str | None = None) -> list[dict[str, Any]]:
         """Synchronous — returns raw rows for Excel."""
         import time
+
         time.sleep(1.0)  # simulate heavy query
         return [
             {"dept": "Enterprise", "revenue": 52_000_000, "deals": 87, "avg_deal": 597_701},
@@ -82,7 +85,12 @@ class FakeOraclePool:
     def query_etl_status(self) -> list[dict[str, Any]]:
         """ETL pipeline status."""
         return [
-            {"pipeline": "stg_transactions", "status": "OK", "rows": 1_240_000, "duration": "4m12s"},
+            {
+                "pipeline": "stg_transactions",
+                "status": "OK",
+                "rows": 1_240_000,
+                "duration": "4m12s",
+            },
             {"pipeline": "stg_clients", "status": "OK", "rows": 47_000, "duration": "1m03s"},
             {"pipeline": "dm_sales", "status": "FAIL", "rows": 0, "duration": "0m00s"},
             {"pipeline": "dm_risk", "status": "OK", "rows": 890_000, "duration": "8m45s"},
@@ -90,6 +98,7 @@ class FakeOraclePool:
 
 
 # ── Sync-to-async wrappers ──────────────────────────────────────────
+
 
 @sync_to_async
 def build_excel(rows: list[dict[str, Any]], title: str) -> bytes:
@@ -232,8 +241,7 @@ async def cmd_etl(message: Message) -> None:
     for s in statuses:
         emoji = "🟢" if s["status"] == "OK" else "🔴"
         lines.append(
-            f"  {emoji} {s['pipeline']}: {s['status']} "
-            f"({s['rows']:,} rows, {s['duration']})"
+            f"  {emoji} {s['pipeline']}: {s['status']} ({s['rows']:,} rows, {s['duration']})"
         )
     text = "\n".join(lines)
 
@@ -264,7 +272,8 @@ async def main() -> None:
         scheduler.start(bot, db=db)
         logger.info(
             "Report bot '%s' started, %d scheduled jobs",
-            me.nick, len(scheduler.jobs),
+            me.nick,
+            len(scheduler.jobs),
         )
 
     @dp.on_shutdown

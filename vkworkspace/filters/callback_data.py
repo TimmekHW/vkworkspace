@@ -75,7 +75,7 @@ class CallbackDataFactory(BaseModel):
         if not prefix:
             raise TypeError(
                 f"{cls.__name__} must define a prefix: "
-                f"class {cls.__name__}(CallbackDataFactory, prefix=\"...\")"
+                f'class {cls.__name__}(CallbackDataFactory, prefix="...")'
             )
         cls.__callback_prefix__ = prefix
         cls.__callback_sep__ = sep
@@ -118,17 +118,14 @@ class CallbackDataFactory(BaseModel):
         parts = data.split(sep)
 
         if parts[0] != prefix:
-            raise ValueError(
-                f"Invalid prefix: expected {prefix!r}, got {parts[0]!r}"
-            )
+            raise ValueError(f"Invalid prefix: expected {prefix!r}, got {parts[0]!r}")
 
         field_names = list(cls.model_fields.keys())
         values = parts[1:]
 
         if len(values) != len(field_names):
             raise ValueError(
-                f"{cls.__name__}: expected {len(field_names)} values, "
-                f"got {len(values)}"
+                f"{cls.__name__}: expected {len(field_names)} values, got {len(values)}"
             )
 
         return cls(**dict(zip(field_names, values, strict=True)))
@@ -170,9 +167,7 @@ class _CallbackDataFilter(BaseFilter):
         self._factory = factory
         self._rule = rule
 
-    async def __call__(
-        self, event: Any, **kwargs: Any
-    ) -> bool | dict[str, Any]:
+    async def __call__(self, event: Any, **kwargs: Any) -> bool | dict[str, Any]:
         raw = getattr(event, "callback_data", None)
         if raw is None:
             return False

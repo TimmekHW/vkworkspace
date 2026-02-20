@@ -344,10 +344,7 @@ class Pre(_Node):
         if mode == "html":
             escaped = _escape_for_mode(inner, "html")
             if self._language:
-                return (
-                    f'<pre><code class="{self._language}">'
-                    f"{escaped}</code></pre>"
-                )
+                return f'<pre><code class="{self._language}">{escaped}</code></pre>'
             return f"<pre>{escaped}</pre>"
         return f"```{self._language}\n{inner}\n```"
 

@@ -62,14 +62,10 @@ class Command(BaseFilter):
         ignore_case: bool = True,
     ) -> None:
         self.commands = commands
-        self.prefixes: tuple[str, ...] = (
-            prefix if isinstance(prefix, tuple) else (prefix,)
-        )
+        self.prefixes: tuple[str, ...] = prefix if isinstance(prefix, tuple) else (prefix,)
         self.ignore_case = ignore_case
 
-    async def __call__(
-        self, event: Any, **kwargs: Any
-    ) -> bool | dict[str, Any]:
+    async def __call__(self, event: Any, **kwargs: Any) -> bool | dict[str, Any]:
         text = getattr(event, "text", None)
         if not text:
             return False
@@ -86,7 +82,7 @@ class Command(BaseFilter):
         if matched_prefix is None:
             return False
 
-        without_prefix = text[len(matched_prefix):]
+        without_prefix = text[len(matched_prefix) :]
         parts = without_prefix.split(maxsplit=1)
         command_text = parts[0] if parts else ""
         args_text = parts[1] if len(parts) > 1 else ""

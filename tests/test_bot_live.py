@@ -13,6 +13,7 @@ All arguments can also be set via environment variables:
 
 The script sends real messages to *CHAT_ID*, then cleans them up.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -63,6 +64,7 @@ def _is_unknown_method(e: Exception) -> bool:
 
 
 # ── test runner ────────────────────────────────────────────────────────
+
 
 async def run_tests(token: str, api_url: str, chat_id: str) -> tuple[int, int, int]:
     bot = Bot(token=token, api_url=api_url)
@@ -169,7 +171,8 @@ async def run_tests(token: str, api_url: str, chat_id: str) -> tuple[int, int, i
     if basic_msg_id:
         try:
             r = await bot.send_text(
-                chat_id, "forward test",
+                chat_id,
+                "forward test",
                 forward_chat_id=chat_id,
                 forward_msg_id=basic_msg_id,
             )
@@ -184,7 +187,12 @@ async def run_tests(token: str, api_url: str, chat_id: str) -> tuple[int, int, i
 
     # with inline keyboard
     try:
-        kb = [[{"text": "Button 1", "callbackData": "btn1"}, {"text": "Button 2", "url": "https://example.com"}]]
+        kb = [
+            [
+                {"text": "Button 1", "callbackData": "btn1"},
+                {"text": "Button 2", "url": "https://example.com"},
+            ]
+        ]
         r = await bot.send_text(chat_id, "keyboard test", inline_keyboard_markup=kb)
         assert r.ok
         if r.msg_id:
@@ -198,7 +206,8 @@ async def run_tests(token: str, api_url: str, chat_id: str) -> tuple[int, int, i
     # with format_ (rich formatting)
     try:
         r = await bot.send_text(
-            chat_id, "format test bold",
+            chat_id,
+            "format test bold",
             format_={"bold": [{"offset": 12, "length": 4}]},
         )
         assert r.ok
@@ -451,6 +460,7 @@ async def run_tests(token: str, api_url: str, chat_id: str) -> tuple[int, int, i
         # Generated minimal valid PNG with IDAT
         import struct
         import zlib
+
         width, height = 800, 800
         # raw image data: filter byte 0 + 3 bytes RGB per pixel, per row
         raw_data = b""
@@ -580,6 +590,7 @@ async def run_tests(token: str, api_url: str, chat_id: str) -> tuple[int, int, i
 
 
 # ── main ───────────────────────────────────────────────────────────────
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="vkworkspace live API test")

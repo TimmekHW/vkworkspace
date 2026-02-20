@@ -133,7 +133,9 @@ class InputFile:
         limit = cls._DEFAULT_MAX_SIZE if max_size is None else max_size
 
         async with httpx.AsyncClient(
-            timeout=timeout, follow_redirects=True, proxy=proxy,
+            timeout=timeout,
+            follow_redirects=True,
+            proxy=proxy,
         ) as client:
             resp = await client.get(url)
             resp.raise_for_status()

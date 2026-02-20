@@ -25,28 +25,45 @@ _UNSET: Any = object()  # sentinel: "caller didn't pass parse_mode"
 
 
 class RateLimiter:
-    """
-    Simple rate limiter based on minimum interval between requests.
+    """Token-bucket rate limiter.
+
+    Allows short bursts up to ``burst`` requests, then throttles to
+    ``rate`` requests per second.  Thread-safe via asyncio lock.
+
+    Args:
+        rate: Sustained request rate in requests/second (e.g. ``1.0``).
+        burst: Maximum tokens in the bucket (default ``5``).
+            Allows up to ``burst`` back-to-back requests before throttling.
 
     Usage::
 
-        limiter = RateLimiter(rate=5)  # max 5 requests/sec
-        await limiter.acquire()        # blocks if too fast
+        limiter = RateLimiter(rate=1.0, burst=5)
+        await limiter.acquire()   # blocks only when bucket is empty
     """
 
-    def __init__(self, rate: float) -> None:
+    def __init__(self, rate: float, burst: int = 5) -> None:
         self.rate = rate
-        self.interval = 1.0 / rate
-        self._last_request: float = 0.0
+        self.burst = burst
+        self._tokens: float = float(burst)
+        self._last_refill: float = time.monotonic()
         self._lock = asyncio.Lock()
 
     async def acquire(self) -> None:
         async with self._lock:
             now = time.monotonic()
-            elapsed = now - self._last_request
-            if elapsed < self.interval:
-                await asyncio.sleep(self.interval - elapsed)
-            self._last_request = time.monotonic()
+            # Refill tokens proportional to elapsed time
+            elapsed = now - self._last_refill
+            self._tokens = min(self.burst, self._tokens + elapsed * self.rate)
+            self._last_refill = now
+
+            if self._tokens >= 1.0:
+                self._tokens -= 1.0
+            else:
+                # Wait until one token becomes available
+                wait = (1.0 - self._tokens) / self.rate
+                await asyncio.sleep(wait)
+                self._tokens = 0.0
+                self._last_refill = time.monotonic()
 
 
 class Bot:
@@ -118,9 +135,7 @@ class Bot:
         self.parse_mode = parse_mode
         self.retry_on_5xx = retry_on_5xx
         self.verify_ssl = verify_ssl
-        self._rate_limiter: RateLimiter | None = (
-            RateLimiter(rate_limit) if rate_limit else None
-        )
+        self._rate_limiter: RateLimiter | None = RateLimiter(rate_limit) if rate_limit else None
         self._session: httpx.AsyncClient | None = None
         self._last_event_id: int = 0
 
@@ -197,10 +212,13 @@ class Bot:
                 if exc.response.status_code < 500 or attempt >= max_attempts - 1:
                     raise
                 last_exc = exc
-                delay = min(2 ** attempt, 8)
+                delay = min(2**attempt, 8)
                 logger.warning(
                     "5xx from %s (attempt %d/%d), retrying in %ds...",
-                    endpoint, attempt + 1, max_attempts, delay,
+                    endpoint,
+                    attempt + 1,
+                    max_attempts,
+                    delay,
                 )
                 await asyncio.sleep(delay)
 
@@ -309,10 +327,11 @@ class Bot:
                 self._params(pollTime=pt, lastEventId=eid),
             )
         except httpx.HTTPStatusError as exc:
-            if exc.response.status_code >= 500:
+            status = exc.response.status_code
+            if status >= 500 or status == 404:
                 logger.debug(
                     "Long-poll returned %s, reconnecting...",
-                    exc.response.status_code,
+                    status,
                 )
                 return []
             raise
@@ -373,8 +392,7 @@ class Bot:
         """
         if len(text) > self.TEXT_LENGTH_WARNING:
             logger.warning(
-                "Text length %d exceeds %d chars — "
-                "may cause UI lag or be rejected by the server",
+                "Text length %d exceeds %d chars — may cause UI lag or be rejected by the server",
                 len(text),
                 self.TEXT_LENGTH_WARNING,
             )
@@ -434,8 +452,7 @@ class Bot:
         """Edit message text. ``messages/editText``"""
         if len(text) > self.TEXT_LENGTH_WARNING:
             logger.warning(
-                "Text length %d exceeds %d chars — "
-                "may cause UI lag or be rejected by the server",
+                "Text length %d exceeds %d chars — may cause UI lag or be rejected by the server",
                 len(text),
                 self.TEXT_LENGTH_WARNING,
             )

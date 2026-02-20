@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.3] - 2026-02-20
+
+### Added
+- `Message.caption` — caption from file attachment (VK Teams hides it in `parts`, this property normalises it)
+- `Message.content` — `text or caption`, universal getter for handlers that deal with both text and file-with-caption
+- `Message.is_edited` — `True` when `editedTimestamp` is set; docstring covers VK Teams ghost-delete quirk in private chats
+- `Message.sticker` — typed sticker attachment from `parts`
+- `Message.voice` — typed voice attachment from `parts`
+- `Message.thread_root_chat_id` — original chat ID for thread/comment messages
+- `Message.thread_root_message_id` — root message ID (int) for thread/comment messages
+- `Message.is_thread_message` — expanded docstring: channel comments are thread messages
+- `ReplyMessagePayload.format` — captures formatting of quoted messages
+- `Thread.ok` field; `thread_id` default `""` instead of required
+
+### Changed
+- `RateLimiter` upgraded from min-interval to **token-bucket** (`burst=5`) — allows short bursts before throttling
+- Long-poll reconnects on HTTP 404 in addition to 5xx
+- `llm_full.md`: new `Message` properties documented, token-bucket rate limiter description updated
+- `README.md` / `README_RU.md`: added Threads section with thread chat ID explanation and channel comments note
+
 ## [1.8.2] - 2026-02-20
 
 ### Fixed

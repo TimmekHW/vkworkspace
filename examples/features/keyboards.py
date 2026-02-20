@@ -58,8 +58,8 @@ async def callback_cancel(query: CallbackQuery) -> None:
 
 
 class ProductCB(CallbackDataFactory, prefix="product"):
-    action: str   # "buy", "info", "fav"
-    id: int       # product ID
+    action: str  # "buy", "info", "fav"
+    id: int  # product ID
 
 
 @router.message(Command("catalog"))
@@ -105,9 +105,21 @@ async def on_product_buy(query: CallbackQuery, callback_data: ProductCB) -> None
 # ── 4. Paginator: list with ◀ / ▶ navigation ────────────────────────
 
 FRUITS = [
-    "Apple", "Banana", "Cherry", "Date", "Elderberry",
-    "Fig", "Grape", "Honeydew", "Kiwi", "Lemon",
-    "Mango", "Nectarine", "Orange", "Papaya", "Quince",
+    "Apple",
+    "Banana",
+    "Cherry",
+    "Date",
+    "Elderberry",
+    "Fig",
+    "Grape",
+    "Honeydew",
+    "Kiwi",
+    "Lemon",
+    "Mango",
+    "Nectarine",
+    "Orange",
+    "Papaya",
+    "Quince",
 ]
 
 

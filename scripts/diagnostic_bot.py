@@ -50,6 +50,7 @@ log = logging.getLogger("diagnostic")
 
 # ── JSONL logger ───────────────────────────────────────────────────────────
 
+
 def ts() -> str:
     return datetime.now(UTC).isoformat()
 
@@ -71,6 +72,7 @@ def safe_dump(obj: Any) -> Any:
 
 
 # ── Raw HTTP client (no Pydantic, pure JSON logging) ──────────────────────
+
 
 class DiagnosticClient:
     """
@@ -108,11 +110,13 @@ class DiagnosticClient:
 
         # Log outgoing request
         safe_params = {k: v for k, v in p.items() if k != "token"}
-        write_log({
-            "_type": "API_REQUEST",
-            "method": method,
-            "params": safe_params,
-        })
+        write_log(
+            {
+                "_type": "API_REQUEST",
+                "method": method,
+                "params": safe_params,
+            }
+        )
 
         resp = await s.get(url, params=p)
         raw_text = resp.text
@@ -123,12 +127,14 @@ class DiagnosticClient:
             data = {"_raw_text": raw_text, "_status": resp.status_code}
 
         if log_response:
-            write_log({
-                "_type": "API_RESPONSE",
-                "method": method,
-                "status_code": resp.status_code,
-                "data": data,
-            })
+            write_log(
+                {
+                    "_type": "API_RESPONSE",
+                    "method": method,
+                    "status_code": resp.status_code,
+                    "data": data,
+                }
+            )
 
         return data
 
@@ -141,11 +147,13 @@ class DiagnosticClient:
         events = data.get("events", [])
 
         if events:
-            write_log({
-                "_type": "POLL_BATCH",
-                "count": len(events),
-                "event_ids": [e.get("eventId") for e in events],
-            })
+            write_log(
+                {
+                    "_type": "POLL_BATCH",
+                    "count": len(events),
+                    "event_ids": [e.get("eventId") for e in events],
+                }
+            )
 
         for ev in events:
             eid = ev.get("eventId", 0)
@@ -153,13 +161,15 @@ class DiagnosticClient:
                 self._last_event_id = eid
 
             # === THE MAIN LOG: every raw event, untouched ===
-            write_log({
-                "_type": "RAW_EVENT",
-                "eventId": eid,
-                "type": ev.get("type", "UNKNOWN"),
-                "payload": ev.get("payload", {}),
-                "_full_event": ev,  # keep the entire object in case there are extra keys
-            })
+            write_log(
+                {
+                    "_type": "RAW_EVENT",
+                    "eventId": eid,
+                    "type": ev.get("type", "UNKNOWN"),
+                    "payload": ev.get("payload", {}),
+                    "_full_event": ev,  # keep the entire object in case there are extra keys
+                }
+            )
 
         return events
 
@@ -205,23 +215,44 @@ class DiagnosticClient:
 # ── Event analysis helpers ─────────────────────────────────────────────────
 
 KNOWN_EVENT_TYPES = {
-    "newMessage", "editedMessage", "deletedMessage",
-    "pinnedMessage", "unpinnedMessage",
-    "newChatMembers", "leftChatMembers", "changedChatInfo",
+    "newMessage",
+    "editedMessage",
+    "deletedMessage",
+    "pinnedMessage",
+    "unpinnedMessage",
+    "newChatMembers",
+    "leftChatMembers",
+    "changedChatInfo",
     "callbackQuery",
 }
 
 KNOWN_MESSAGE_FIELDS = {
-    "msgId", "chat", "from", "text", "timestamp", "format", "parts",
+    "msgId",
+    "chat",
+    "from",
+    "text",
+    "timestamp",
+    "format",
+    "parts",
     "editedTimestamp",
 }
 
 KNOWN_PART_TYPES = {
-    "sticker", "mention", "voice", "file", "forward", "reply", "inline_keyboard",
+    "sticker",
+    "mention",
+    "voice",
+    "file",
+    "forward",
+    "reply",
+    "inline_keyboard",
 }
 
 KNOWN_CALLBACK_FIELDS = {
-    "queryId", "from", "message", "callbackData", "chat",
+    "queryId",
+    "from",
+    "message",
+    "callbackData",
+    "chat",
 }
 
 
@@ -282,6 +313,7 @@ def analyze_event(event: dict[str, Any]) -> dict[str, Any]:
 
 # ── Human-readable echo ───────────────────────────────────────────────────
 
+
 def describe_event(event: dict[str, Any]) -> str:
     """Build a human-readable summary to echo back to the tester."""
     etype = event.get("type", "?")
@@ -294,16 +326,16 @@ def describe_event(event: dict[str, Any]) -> str:
             lines.append(f"Text: {text[:200]}")
         parts = payload.get("parts", [])
         if parts:
-            part_summary = ", ".join(
-                f"{p.get('type', '?')}" for p in parts
-            )
+            part_summary = ", ".join(f"{p.get('type', '?')}" for p in parts)
             lines.append(f"Parts ({len(parts)}): {part_summary}")
         fmt = payload.get("format")
         if fmt:
             lines.append(f"Format: {json.dumps(fmt, ensure_ascii=False)[:300]}")
         from_user = payload.get("from", {})
         if from_user:
-            lines.append(f"From: {from_user.get('firstName', '')} {from_user.get('lastName', '')} [{from_user.get('userId', '')}]")
+            lines.append(
+                f"From: {from_user.get('firstName', '')} {from_user.get('lastName', '')} [{from_user.get('userId', '')}]"
+            )
 
     elif etype == "callbackQuery":
         lines.append(f"CallbackData: {payload.get('callbackData', '')}")
@@ -343,6 +375,7 @@ def describe_event(event: dict[str, Any]) -> str:
 
 
 # ── Bot commands ───────────────────────────────────────────────────────────
+
 
 async def handle_command(
     client: DiagnosticClient,
@@ -385,19 +418,27 @@ async def handle_command(
 
     elif cmd == "/info":
         data = await client.get_chat_info(chat_id)
-        await client.send_text(chat_id, f"Chat info:\n{json.dumps(data, ensure_ascii=False, indent=2)[:4000]}")
+        await client.send_text(
+            chat_id, f"Chat info:\n{json.dumps(data, ensure_ascii=False, indent=2)[:4000]}"
+        )
 
     elif cmd == "/admins":
         data = await client.get_chat_admins(chat_id)
-        await client.send_text(chat_id, f"Admins:\n{json.dumps(data, ensure_ascii=False, indent=2)[:4000]}")
+        await client.send_text(
+            chat_id, f"Admins:\n{json.dumps(data, ensure_ascii=False, indent=2)[:4000]}"
+        )
 
     elif cmd == "/members":
         data = await client.get_chat_members(chat_id)
-        await client.send_text(chat_id, f"Members:\n{json.dumps(data, ensure_ascii=False, indent=2)[:4000]}")
+        await client.send_text(
+            chat_id, f"Members:\n{json.dumps(data, ensure_ascii=False, indent=2)[:4000]}"
+        )
 
     elif cmd == "/me":
         data = await client.get_me()
-        await client.send_text(chat_id, f"Bot info:\n{json.dumps(data, ensure_ascii=False, indent=2)[:4000]}")
+        await client.send_text(
+            chat_id, f"Bot info:\n{json.dumps(data, ensure_ascii=False, indent=2)[:4000]}"
+        )
 
     elif cmd == "/stats":
         if LOG_FILE.exists():
@@ -430,15 +471,18 @@ async def handle_command(
 
 # ── Main loop ──────────────────────────────────────────────────────────────
 
+
 async def main() -> None:
     client = DiagnosticClient(token=TOKEN, api_url=API_URL)
 
     # Log session start
-    write_log({
-        "_type": "SESSION_START",
-        "api_url": API_URL,
-        "log_file": str(LOG_FILE),
-    })
+    write_log(
+        {
+            "_type": "SESSION_START",
+            "api_url": API_URL,
+            "log_file": str(LOG_FILE),
+        }
+    )
 
     # Get bot info
     me = await client.get_me()
@@ -522,11 +566,13 @@ async def main() -> None:
                         pp = part.get("payload", {})
                         if isinstance(pp, dict) and "fileId" in pp:
                             file_info = await client.get_file_info(pp["fileId"])
-                            write_log({
-                                "_type": "FILE_INFO",
-                                "fileId": pp["fileId"],
-                                "data": file_info,
-                            })
+                            write_log(
+                                {
+                                    "_type": "FILE_INFO",
+                                    "fileId": pp["fileId"],
+                                    "data": file_info,
+                                }
+                            )
 
                 elif event_type == "callbackQuery":
                     query_id = payload.get("queryId", "")
@@ -548,8 +594,14 @@ async def main() -> None:
                             f"Logged callbackQuery:\n\n{summary}",
                         )
 
-                elif event_type in ("deletedMessage", "pinnedMessage", "unpinnedMessage",
-                                     "newChatMembers", "leftChatMembers", "changedChatInfo"):
+                elif event_type in (
+                    "deletedMessage",
+                    "pinnedMessage",
+                    "unpinnedMessage",
+                    "newChatMembers",
+                    "leftChatMembers",
+                    "changedChatInfo",
+                ):
                     if chat_id:
                         summary = describe_event(event)
                         await client.send_text(
@@ -569,12 +621,14 @@ async def main() -> None:
 
             except Exception as e:
                 log.exception("Error handling event %s: %s", event_type, e)
-                write_log({
-                    "_type": "HANDLER_ERROR",
-                    "event_type": event_type,
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                })
+                write_log(
+                    {
+                        "_type": "HANDLER_ERROR",
+                        "event_type": event_type,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    }
+                )
 
     write_log({"_type": "SESSION_END"})
     await client.close()

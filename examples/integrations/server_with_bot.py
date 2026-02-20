@@ -44,6 +44,7 @@ server = BotServer(
 
 # ── HTTP routes (for external systems) ────────────────────────────────
 
+
 @server.route("/send")
 async def send(bot: Bot, data: dict):
     """POST /send {"email": "...", "text": "..."}"""

@@ -45,11 +45,11 @@ async def main() -> None:
     bot = Bot(
         token="YOUR_BOT_TOKEN",
         api_url="https://api.internal.corp/bot/v1",
-        rate_limit=5,                          # Max 5 requests/sec
+        rate_limit=5,  # Max 5 requests/sec
         proxy="http://corp-proxy.local:3128",  # Corporate HTTP proxy
-        timeout=30.0,                          # Request timeout
-        retry_on_5xx=3,                        # Retry up to 3 times on 5xx errors
-        verify_ssl=False,                      # Disable SSL for self-signed certs
+        timeout=30.0,  # Request timeout
+        retry_on_5xx=3,  # Retry up to 3 times on 5xx errors
+        verify_ssl=False,  # Disable SSL for self-signed certs
     )
 
     dp = Dispatcher()

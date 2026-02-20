@@ -49,7 +49,8 @@ router = Router()
 @router.message(Command("start"))
 async def cmd_start(message: Message) -> None:
     content = Text(
-        Bold("Text formatting demo bot"), "\n\n",
+        Bold("Text formatting demo bot"),
+        "\n\n",
         "/md — MarkdownV2 (string helpers)\n",
         "/html — HTML (string helpers)\n",
         "/builder — Text builder (aiogram-style)\n",
@@ -62,17 +63,19 @@ async def cmd_start(message: Message) -> None:
 
 @router.message(Command("md"))
 async def cmd_markdown(message: Message) -> None:
-    text = "\n".join([
-        md.bold("Bold text"),
-        md.italic("Italic text"),
-        md.underline("Underlined"),
-        md.strikethrough("Strikethrough"),
-        md.code("inline code"),
-        md.pre("x = 42\nprint(x)", "python"),
-        md.link("Example link", "https://example.com"),
-        md.mention("user@company.ru"),
-        md.quote("This is a quote"),
-    ])
+    text = "\n".join(
+        [
+            md.bold("Bold text"),
+            md.italic("Italic text"),
+            md.underline("Underlined"),
+            md.strikethrough("Strikethrough"),
+            md.code("inline code"),
+            md.pre("x = 42\nprint(x)", "python"),
+            md.link("Example link", "https://example.com"),
+            md.mention("user@company.ru"),
+            md.quote("This is a quote"),
+        ]
+    )
     # ── Option 2: override per message ──
     # Bot default is HTML, but this specific message uses MarkdownV2
     await message.answer(text, parse_mode=ParseMode.MARKDOWNV2)
@@ -80,19 +83,21 @@ async def cmd_markdown(message: Message) -> None:
 
 @router.message(Command("html"))
 async def cmd_html(message: Message) -> None:
-    text = "\n".join([
-        html.bold("Bold text"),
-        html.italic("Italic text"),
-        html.underline("Underlined"),
-        html.strikethrough("Strikethrough"),
-        html.code("inline code"),
-        html.pre("x = 42\nprint(x)", "python"),
-        html.link("Example link", "https://example.com"),
-        html.mention("user@company.ru"),
-        html.quote("This is a quote"),
-        "",
-        html.unordered_list(["Item A", "Item B", "Item C"]),
-    ])
+    text = "\n".join(
+        [
+            html.bold("Bold text"),
+            html.italic("Italic text"),
+            html.underline("Underlined"),
+            html.strikethrough("Strikethrough"),
+            html.code("inline code"),
+            html.pre("x = 42\nprint(x)", "python"),
+            html.link("Example link", "https://example.com"),
+            html.mention("user@company.ru"),
+            html.quote("This is a quote"),
+            "",
+            html.unordered_list(["Item A", "Item B", "Item C"]),
+        ]
+    )
     # parse_mode inherited from Bot(parse_mode=HTML) — no need to pass it
     await message.answer(text)
 
@@ -101,14 +106,24 @@ async def cmd_html(message: Message) -> None:
 async def cmd_builder(message: Message) -> None:
     # Text builder: composable nodes with auto-escaping and auto parse_mode
     content = Text(
-        Bold("Text Builder Demo"), "\n\n",
-        "This is ", Bold("bold"), ", ",
-        Italic("italic"), ", ",
-        Underline("underlined"), ", and ",
-        Bold(Italic("bold italic")), ".\n\n",
-        "Inline: ", Code("x = 42"), "\n",
-        Pre("def hello():\n    print('world')", language="python"), "\n",
-        Link("Example link", url="https://example.com"), "\n",
+        Bold("Text Builder Demo"),
+        "\n\n",
+        "This is ",
+        Bold("bold"),
+        ", ",
+        Italic("italic"),
+        ", ",
+        Underline("underlined"),
+        ", and ",
+        Bold(Italic("bold italic")),
+        ".\n\n",
+        "Inline: ",
+        Code("x = 42"),
+        "\n",
+        Pre("def hello():\n    print('world')", language="python"),
+        "\n",
+        Link("Example link", url="https://example.com"),
+        "\n",
         Mention("user@company.ru"),
     )
     # as_kwargs() returns {"text": "...", "parse_mode": "HTML"} — no need to choose mode
@@ -136,9 +151,7 @@ async def cmd_format(message: Message, bot: Bot) -> None:
 @router.message(Command("long"))
 async def cmd_long(message: Message) -> None:
     # Generate a long message (~6000 chars)
-    long_text = "\n".join(
-        f"Line {i}: {'A' * 50}" for i in range(1, 101)
-    )
+    long_text = "\n".join(f"Line {i}: {'A' * 50}" for i in range(1, 101))
     chunks = split_text(long_text)
     # parse_mode=None disables formatting even if Bot has a default
     await message.answer(
@@ -157,9 +170,7 @@ async def cmd_escape(message: Message) -> None:
     html_safe = html.escape(raw)
 
     await message.answer(
-        f"Raw input:\n{raw}\n\n"
-        f"md.escape():\n{md_safe}\n\n"
-        f"html.escape():\n{html_safe}"
+        f"Raw input:\n{raw}\n\nmd.escape():\n{md_safe}\n\nhtml.escape():\n{html_safe}"
     )
 
 

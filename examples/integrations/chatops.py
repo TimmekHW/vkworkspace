@@ -108,12 +108,14 @@ class RBACMiddleware(BaseMiddleware):
                     nick = event.from_user.nick or user_id
                 logger.warning(
                     "ACCESS DENIED: %s (%s) tried /%s (requires %s)",
-                    nick, role, command.command, required,
+                    nick,
+                    role,
+                    command.command,
+                    required,
                 )
                 if hasattr(event, "answer"):
                     await event.answer(
-                        f"Нет доступа. /{command.command} требует роль "
-                        f"{required}+, у тебя {role}."
+                        f"Нет доступа. /{command.command} требует роль {required}+, у тебя {role}."
                     )
                 return None
 
@@ -122,7 +124,10 @@ class RBACMiddleware(BaseMiddleware):
             nick = event.from_user.nick or user_id
             logger.info(
                 "AUDIT: %s (%s) executed /%s %s",
-                nick, role, command.command, command.args or "",
+                nick,
+                role,
+                command.command,
+                command.args or "",
             )
 
         return await handler(event, data)
@@ -143,8 +148,7 @@ async def health_check(bot: Bot) -> None:
     if down:
         await bot.send_text(
             TEAM_CHAT,
-            f"<b>Health check failed</b>\n"
-            f"Down: {', '.join(down)}",
+            f"<b>Health check failed</b>\nDown: {', '.join(down)}",
             parse_mode="HTML",
         )
 
@@ -164,10 +168,7 @@ async def weekly_summary(bot: Bot) -> None:
     """Friday 18:00 — weekly incident count."""
     await bot.send_text(
         TEAM_CHAT,
-        "<b>Weekly Summary</b>\n"
-        "Incidents: 3 (2 resolved, 1 ongoing)\n"
-        "Deploys: 12\n"
-        "Uptime: 99.7%",
+        "<b>Weekly Summary</b>\nIncidents: 3 (2 resolved, 1 ongoing)\nDeploys: 12\nUptime: 99.7%",
         parse_mode="HTML",
     )
 
@@ -207,7 +208,8 @@ async def cmd_help(message: Message, role: str) -> None:
         lines.append(f"  /{cmd}{lock}")
 
     await message.answer(
-        "\n".join(lines).format(role=role), parse_mode="HTML",
+        "\n".join(lines).format(role=role),
+        parse_mode="HTML",
     )
 
 
@@ -246,8 +248,7 @@ async def cmd_logs(message: Message, command: Any) -> None:
 
     # Stub — replace with kubectl logs / docker logs / journalctl
     fake_logs = "\n".join(
-        f"2024-01-15 10:{i:02d}:00 INFO request handled"
-        for i in range(min(n, 10))
+        f"2024-01-15 10:{i:02d}:00 INFO request handled" for i in range(min(n, 10))
     )
     await message.answer(f"<code>{fake_logs}</code>", parse_mode="HTML")
 
@@ -267,6 +268,7 @@ async def cmd_restart(message: Message, command: Any) -> None:
     async with message.typing():
         # Stub — replace with kubectl rollout restart / docker restart
         import asyncio
+
         await asyncio.sleep(2)
 
     await message.answer(f"Restarted {service}")
@@ -277,9 +279,7 @@ async def cmd_deploy(message: Message, command: Any) -> None:
     """Deploy a service. Requires L3+. /deploy api-gateway v2.1.0"""
     args = (command.args or "").strip().split()
     if len(args) != 2:
-        await message.answer(
-            "Usage: /deploy service tag\nExample: /deploy api-gateway v2.1.0"
-        )
+        await message.answer("Usage: /deploy service tag\nExample: /deploy api-gateway v2.1.0")
         return
 
     service, tag = args
@@ -291,14 +291,12 @@ async def cmd_deploy(message: Message, command: Any) -> None:
     async with message.typing():
         # Stub — replace with kubectl set image / helm upgrade / etc.
         import asyncio
+
         await asyncio.sleep(3)
 
     user = message.from_user.nick if message.from_user else "?"
     await message.answer(
-        f"<b>Deployed</b>\n"
-        f"Service: {service}\n"
-        f"Tag: {tag}\n"
-        f"By: {user}",
+        f"<b>Deployed</b>\nService: {service}\nTag: {tag}\nBy: {user}",
         parse_mode="HTML",
     )
 
@@ -317,6 +315,7 @@ async def fallback(message: Message) -> None:
 
 # ── HTTP routes (CI/CD integration) ─────────────────────────────────
 
+
 @server.route("/deploy")
 async def http_deploy(bot: Bot, data: dict) -> dict[str, Any]:
     """POST /deploy — trigger deploy from CI/CD pipeline.
@@ -330,15 +329,14 @@ async def http_deploy(bot: Bot, data: dict) -> dict[str, Any]:
 
     await bot.send_text(
         chat_id,
-        f"<b>CI/CD Deploy</b>\n"
-        f"Service: {service}\n"
-        f"Tag: {tag}",
+        f"<b>CI/CD Deploy</b>\nService: {service}\nTag: {tag}",
         parse_mode="HTML",
     )
     return {"ok": True, "service": service, "tag": tag}
 
 
 # ── Lifecycle ────────────────────────────────────────────────────────
+
 
 @server.on_startup
 async def on_startup() -> None:

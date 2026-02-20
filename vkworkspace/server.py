@@ -172,7 +172,8 @@ class BotServer:
     # ── lifecycle hooks ────────────────────────────────────────────────
 
     def on_startup(
-        self, callback: Callable[..., Any] | None = None,
+        self,
+        callback: Callable[..., Any] | None = None,
     ) -> Any:
         """Register a startup hook. Runs before the server starts accepting.
 
@@ -196,7 +197,8 @@ class BotServer:
         return decorator
 
     def on_shutdown(
-        self, callback: Callable[..., Any] | None = None,
+        self,
+        callback: Callable[..., Any] | None = None,
     ) -> Any:
         """Register a shutdown hook. Runs after the server stops.
 
@@ -381,9 +383,9 @@ class BotServer:
 
             # Auth
             if self.api_key and headers.get("x-api-key", "") != self.api_key:
-                    self._write_response(writer, 401, {"ok": False, "error": "unauthorized"})
-                    await writer.drain()
-                    return
+                self._write_response(writer, 401, {"ok": False, "error": "unauthorized"})
+                await writer.drain()
+                return
 
             # Built-in: GET /health
             if path == "/health" and method == "GET":
@@ -399,11 +401,15 @@ class BotServer:
             # Route lookup
             route_info = self._routes.get(path)
             if route_info is None:
-                self._write_response(writer, 404, {
-                    "ok": False,
-                    "error": f"not found: {path}",
-                    "routes": list(self._routes.keys()),
-                })
+                self._write_response(
+                    writer,
+                    404,
+                    {
+                        "ok": False,
+                        "error": f"not found: {path}",
+                        "routes": list(self._routes.keys()),
+                    },
+                )
                 await writer.drain()
                 return
 
@@ -411,11 +417,15 @@ class BotServer:
 
             # Method check
             if method not in allowed_methods:
-                self._write_response(writer, 405, {
-                    "ok": False,
-                    "error": f"method {method} not allowed, "
-                    f"use {', '.join(sorted(allowed_methods))}",
-                })
+                self._write_response(
+                    writer,
+                    405,
+                    {
+                        "ok": False,
+                        "error": f"method {method} not allowed, "
+                        f"use {', '.join(sorted(allowed_methods))}",
+                    },
+                )
                 await writer.drain()
                 return
 
@@ -425,7 +435,9 @@ class BotServer:
                     data = json.loads(body) if body else {}
                 except json.JSONDecodeError as exc:
                     self._write_response(
-                        writer, 400, {"ok": False, "error": f"invalid JSON: {exc}"},
+                        writer,
+                        400,
+                        {"ok": False, "error": f"invalid JSON: {exc}"},
                     )
                     await writer.drain()
                     return

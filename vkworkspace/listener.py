@@ -196,6 +196,7 @@ class RedisListener:
             async def on_task(bot, data: TaskPayload):
                 await bot.send_text(data.chat_id, data.text)
         """
+
         def decorator(func: ListenerHandler) -> ListenerHandler:
             self._handlers[stream] = (func, model)
             return func
@@ -205,7 +206,8 @@ class RedisListener:
     # ── lifecycle hooks ────────────────────────────────────────────────
 
     def on_startup(
-        self, callback: Callable[..., Any] | None = None,
+        self,
+        callback: Callable[..., Any] | None = None,
     ) -> Any:
         """Register a startup hook. Runs before streams are consumed.
 
@@ -229,7 +231,8 @@ class RedisListener:
         return decorator
 
     def on_shutdown(
-        self, callback: Callable[..., Any] | None = None,
+        self,
+        callback: Callable[..., Any] | None = None,
     ) -> Any:
         """Register a shutdown hook. Runs after streams stop.
 
@@ -413,7 +416,9 @@ class RedisListener:
 
         logger.info(
             "Listening on stream '%s' (group=%s, consumer=%s)",
-            stream, self.group, self.consumer,
+            stream,
+            self.group,
+            self.consumer,
         )
 
         while self._running:
@@ -431,7 +436,12 @@ class RedisListener:
                 for _stream_name, messages in results:
                     for msg_id, fields in messages:
                         await self._process_message(
-                            redis, stream, msg_id, fields, func, model,
+                            redis,
+                            stream,
+                            msg_id,
+                            fields,
+                            func,
+                            model,
                         )
 
             except asyncio.CancelledError:
@@ -461,8 +471,10 @@ class RedisListener:
 
                 # Get pending messages for this consumer
                 pending = await redis.xpending_range(
-                    stream, self.group,
-                    min="-", max="+",
+                    stream,
+                    self.group,
+                    min="-",
+                    max="+",
                     count=100,
                     consumername=self.consumer,
                 )
@@ -490,14 +502,19 @@ class RedisListener:
                             await redis.xadd(dead_letter, fields)
                             logger.warning(
                                 "Dead letter: %s:%s → %s (after %d attempts)",
-                                stream, msg_id, dead_letter, delivery_count,
+                                stream,
+                                msg_id,
+                                dead_letter,
+                                delivery_count,
                             )
                         await redis.xack(stream, self.group, msg_id)
                         continue
 
                     # Retry: claim and re-process
                     claimed = await redis.xclaim(
-                        stream, self.group, self.consumer,
+                        stream,
+                        self.group,
+                        self.consumer,
                         min_idle_time=int(self.retry_after * 1000),
                         message_ids=[msg_id],
                     )
@@ -506,10 +523,18 @@ class RedisListener:
                         if fields:
                             logger.info(
                                 "Retrying %s:%s (attempt %d/%d)",
-                                stream, claimed_id, delivery_count, self.max_retries,
+                                stream,
+                                claimed_id,
+                                delivery_count,
+                                self.max_retries,
                             )
                             await self._process_message(
-                                redis, stream, claimed_id, fields, func, model,
+                                redis,
+                                stream,
+                                claimed_id,
+                                fields,
+                                func,
+                                model,
                             )
 
             except asyncio.CancelledError:

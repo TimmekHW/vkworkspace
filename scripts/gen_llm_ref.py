@@ -79,12 +79,14 @@ def extract_bot_methods() -> list[dict[str, str]]:
             desc = re.sub(r"\s*``[^`]+``\s*", "", doc).strip().rstrip(".")
             ret = _return_annotation(item)
 
-            methods.append({
-                "name": item.name,
-                "endpoint": endpoint,
-                "description": desc,
-                "return": ret,
-            })
+            methods.append(
+                {
+                    "name": item.name,
+                    "endpoint": endpoint,
+                    "description": desc,
+                    "return": ret,
+                }
+            )
     return methods
 
 
@@ -176,10 +178,12 @@ def extract_router_observers() -> list[dict[str, str]]:
                         continue
                     name = target.attr
                     if name in descriptions:
-                        observers.append({
-                            "name": name,
-                            "description": descriptions[name],
-                        })
+                        observers.append(
+                            {
+                                "name": name,
+                                "description": descriptions[name],
+                            }
+                        )
     return observers
 
 
@@ -228,10 +232,7 @@ def extract_types_exports() -> list[str]:
                     and target.id == "__all__"
                     and isinstance(node.value, ast.List)
                 ):
-                    return [
-                        ast.literal_eval(elt)
-                        for elt in node.value.elts
-                    ]
+                    return [ast.literal_eval(elt) for elt in node.value.elts]
     return []
 
 
@@ -444,7 +445,7 @@ def section_dispatcher(observers: list[dict[str, str]]) -> str:
         desc = obs["description"]
         # Add example filter for message
         if name == "message":
-            decorator_lines.append(f'@router.{name}()                    # {desc}')
+            decorator_lines.append(f"@router.{name}()                    # {desc}")
             decorator_lines.append(f'@router.{name}(Command("start"))    # /start command')
             decorator_lines.append(f"@router.{name}(F.text)              # messages with text")
         else:
@@ -1387,14 +1388,20 @@ def section_enums(all_enums: dict[str, list[dict[str, str]]]) -> str:
 def section_types(types_list: list[str]) -> str:
     # Curated table with key fields (static — changes rarely)
     curated: dict[str, tuple[str, str]] = {
-        "Message": ("vkworkspace.types", "msg_id, text, chat, from_user, parts, format, parent_topic"),
+        "Message": (
+            "vkworkspace.types",
+            "msg_id, text, chat, from_user, parts, format, parent_topic",
+        ),
         "CallbackQuery": ("vkworkspace.types", "query_id, callback_data, from_user, message"),
         "Chat": ("vkworkspace.types", "chat_id, type, title"),
         "Contact": ("vkworkspace.types.user", "user_id, first_name, last_name, nick"),
         "ChatInfo": ("vkworkspace.types", "type, title, about, rules, is_public"),
         "InputFile": ("vkworkspace.types", "file, filename; from_url(), from_base64()"),
         "APIResponse": ("vkworkspace.types", "ok, msg_id, file_id"),
-        "Part": ("vkworkspace.types.message", "type, payload; as_mention, as_reply, as_forward, as_file"),
+        "Part": (
+            "vkworkspace.types.message",
+            "type, payload; as_mention, as_reply, as_forward, as_file",
+        ),
         "FormatSpan": ("vkworkspace.types.message", "offset, length, url"),
         "ParentMessage": ("vkworkspace.types.message", "chat_id, message_id, type"),
     }

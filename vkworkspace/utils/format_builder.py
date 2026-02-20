@@ -23,6 +23,7 @@ Or find substrings automatically::
 
     await bot.send_text(chat_id, fb.text, format_=fb.build())
 """
+
 from __future__ import annotations
 
 from typing import Any

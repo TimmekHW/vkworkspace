@@ -124,7 +124,9 @@ class TestChatActionSender:
     async def test_custom_action(self):
         bot = SimpleNamespace(send_actions=AsyncMock())
         async with ChatActionSender(
-            bot=bot, chat_id="c1", action=ChatAction.LOOKING,  # type: ignore[arg-type]
+            bot=bot,
+            chat_id="c1",
+            action=ChatAction.LOOKING,  # type: ignore[arg-type]
         ):
             await asyncio.sleep(0.05)
         bot.send_actions.assert_called_with("c1", "looking")

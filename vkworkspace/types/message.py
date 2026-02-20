@@ -17,6 +17,7 @@ _UNSET: Any = object()
 
 # ── Format spans (offset/length ranges in text) ──────────────────
 
+
 class FormatSpan(VKTeamsObject):
     """A single formatting span: offset + length within the text."""
 
@@ -37,13 +38,12 @@ class MessageFormat(VKTeamsObject):
     inline_code: list[FormatSpan] = Field(default_factory=list, alias="inlineCode")
     pre: list[FormatSpan] = Field(default_factory=list)
     ordered_list: list[FormatSpan] = Field(default_factory=list, alias="orderedList")
-    unordered_list: list[FormatSpan] = Field(
-        default_factory=list, alias="unorderedList"
-    )
+    unordered_list: list[FormatSpan] = Field(default_factory=list, alias="unorderedList")
     quote: list[FormatSpan] = Field(default_factory=list)
 
 
 # ── Thread parent (parent_topic) ─────────────────────────────────
+
 
 class ParentMessage(VKTeamsObject):
     """Reference to the root message of a thread (``parent_topic``).
@@ -61,6 +61,7 @@ class ParentMessage(VKTeamsObject):
 
 # ── Message parts (mention, reply, forward, file, …) ─────────────
 
+
 class MentionPayload(VKTeamsObject):
     """Payload for ``parts[].type == "mention"``."""
 
@@ -77,6 +78,7 @@ class ReplyMessagePayload(VKTeamsObject):
     text: str | None = None
     timestamp: int | None = None
     from_user: Contact | None = Field(default=None, alias="from")
+    format: MessageFormat | None = None  # present when quoted message has formatting
 
 
 class ReplyPayload(VKTeamsObject):
@@ -160,14 +162,30 @@ class Message(VKTeamsObject):
         - ``.answer_file(file=...)`` — send a file to the same chat
         - ``.answer_voice(file=...)`` — send a voice message
 
+    Note:
+        Methods that send messages (``answer``, ``reply``, ``answer_file``, etc.)
+        return a partially-populated :class:`Message`. VK Teams API only returns
+        ``msgId`` on send — so ``timestamp``, ``from_user``, and ``parts`` will
+        be ``None`` / empty in the returned object. Only ``msg_id`` and ``chat``
+        are guaranteed. Use ``.delete()`` / ``.edit_text()`` freely — they only
+        need ``msg_id`` and ``chat``.
+
     Key properties:
-        - ``.text`` — message text (``None`` if no text)
-        - ``.chat`` — chat where the message was sent
+        - ``.text`` — message text (``None`` for files-with-caption and forwards)
+        - ``.caption`` — file caption (``None`` if no caption)
+        - ``.content`` — ``.text`` or ``.caption``, whichever is set
+        - ``.chat`` — chat where the message was sent (**thread's own chat** for thread messages)
         - ``.from_user`` — who sent the message
+        - ``.is_edited`` — ``True`` if the message was edited
+        - ``.is_thread_message`` — ``True`` if sent inside a thread or channel comment
+        - ``.thread_root_chat_id`` — original chat ID (for thread/comment messages)
+        - ``.thread_root_message_id`` — root message ID as int (for thread/comment messages)
         - ``.mentions`` — list of @mentions
         - ``.reply_to`` — original message if this is a reply
         - ``.forwards`` — list of forwarded messages
         - ``.files`` — list of file attachments
+        - ``.sticker`` — sticker attachment or ``None``
+        - ``.voice`` — voice attachment or ``None``
 
     Example::
 
@@ -188,8 +206,44 @@ class Message(VKTeamsObject):
 
     @property
     def is_thread_message(self) -> bool:
-        """True if this message was sent inside a thread."""
+        """``True`` if this message was sent inside a thread.
+
+        Thread messages arrive as ``newMessage`` events with ``parent_topic``
+        set.  Their ``chat.chat_id`` is the **thread's own chat ID** (not the
+        original group/channel chat).  Use ``thread_root_chat_id`` and
+        ``thread_root_message_id`` to reach the root message.
+
+        .. note:: **Channel comments are thread messages.**
+            When a bot is a member of a channel, it receives all comments
+            to channel posts as thread messages — without any subscription.
+            The comment's ``thread_root_chat_id`` will be the channel's chat ID.
+
+        Example::
+
+            @router.message(F.is_thread_message)
+            async def on_thread_msg(message: Message):
+                root_chat = message.thread_root_chat_id
+                root_msg  = message.thread_root_message_id
+                await message.answer("Вижу тред!")   # replies into the thread
+        """
         return self.parent_topic is not None
+
+    @property
+    def thread_root_chat_id(self) -> str | None:
+        """Chat ID of the original chat where the thread root message was posted.
+
+        ``None`` if this message is not in a thread.
+        For channel comments this equals the channel's chat ID.
+        """
+        return self.parent_topic.chat_id if self.parent_topic else None
+
+    @property
+    def thread_root_message_id(self) -> int | None:
+        """Message ID (int) of the thread root message in the original chat.
+
+        ``None`` if this message is not in a thread.
+        """
+        return self.parent_topic.message_id if self.parent_topic else None
 
     # ── Convenience accessors for parts ───────────────────────────
 
@@ -209,14 +263,111 @@ class Message(VKTeamsObject):
     @property
     def forwards(self) -> list[ReplyMessagePayload]:
         """All forwarded messages as typed objects."""
-        return [
-            f.message for p in self.parts if (f := p.as_forward) is not None
-        ]
+        return [f.message for p in self.parts if (f := p.as_forward) is not None]
 
     @property
     def files(self) -> list[FilePayload]:
         """All file attachments as typed objects."""
         return [f for p in self.parts if (f := p.as_file) is not None]
+
+    @property
+    def caption(self) -> str | None:
+        """Caption of a file/image message, or ``None`` if absent.
+
+        VK Teams omits the top-level ``text`` field when a **single** file has a
+        caption — the caption lives only in ``parts[0].payload.caption``.
+        This property normalises that so you don't have to dig into parts.
+
+        Note:
+            When **multiple** files are sent in one message, VK Teams puts all
+            file URLs followed by the caption into ``text`` (no clean separation).
+            In that case this property returns ``None``; use ``message.text``
+            directly and strip the URLs manually if needed.
+
+        Example::
+
+            @router.message(F.caption)
+            async def on_photo(message: Message):
+                print(message.caption)   # "фото с текстом"
+        """
+        for part in self.parts:
+            if f := part.as_file:
+                return f.caption
+        return None
+
+    @property
+    def content(self) -> str | None:
+        """Message text — falls back to ``caption`` if ``text`` is ``None``.
+
+        Handy for handlers that handle both plain text and file-with-caption.
+
+        Example::
+
+            @router.message(F.content)
+            async def on_any_text(message: Message):
+                print(message.content)  # text or caption, whichever is set
+        """
+        return self.text or self.caption
+
+    @property
+    def is_edited(self) -> bool:
+        """``True`` if this message was edited (``editedTimestamp`` is set).
+
+        .. note:: **VK Teams quirk — ghost delete event in private chats.**
+            When a message is deleted in a **private** chat, VK Teams sends two
+            events: a proper ``deletedMessage`` event *and* a ghost ``newMessage``
+            event with the same ``msgId``, no ``text``, and ``editedTimestamp``
+            set.  That ghost event lands in ``@router.message()`` handlers with
+            ``is_edited=True`` and ``text=None``.
+
+            Most handlers are unaffected (``F.text``, ``Command()``, etc. do not
+            match ``None``).  If you use bare ``@router.message()`` without any
+            filters, guard against it::
+
+                @router.message(F.is_edited == False)  # skip ghost events
+                async def on_msg(message: Message): ...
+
+        Example::
+
+            @router.edited_message(F.is_edited)
+            async def on_edit(message: Message):
+                print("edited at", message.edited_timestamp)
+        """
+        return self.edited_timestamp is not None
+
+    @property
+    def sticker(self) -> FilePayload | None:
+        """Sticker attachment, or ``None`` if not a sticker message.
+
+        Example::
+
+            @router.message(F.sticker)
+            async def on_sticker(message: Message):
+                s = message.sticker
+                print(s.file_id)   # sticker file ID
+        """
+        for part in self.parts:
+            if part.type == "sticker":
+                data = part.payload if isinstance(part.payload, dict) else {}
+                return FilePayload.model_validate(data)
+        return None
+
+    @property
+    def voice(self) -> FilePayload | None:
+        """Voice message attachment, or ``None`` if not a voice message.
+
+        Example::
+
+            @router.message(F.voice)
+            async def on_voice(message: Message):
+                v = message.voice
+                await bot.get_file_info(v.file_id)
+        """
+        for part in self.parts:
+            if part.type == "voice":
+                data = part.payload if isinstance(part.payload, dict) else {}
+                return FilePayload.model_validate(data)
+        return None
 
     async def answer(
         self,
@@ -247,6 +398,12 @@ class Message(VKTeamsObject):
             sent = await message.answer("I will vanish in 5 seconds")
             await asyncio.sleep(5)
             await sent.delete()
+
+        Note:
+            VK Teams API returns only ``msgId`` on send. The returned
+            :class:`Message` has ``msg_id`` and ``chat`` set; ``timestamp``,
+            ``from_user``, and ``parts`` are ``None`` / empty — VK Teams API
+            limitation, not a bug.
         """
         if parse_mode is not _UNSET:
             kwargs["parse_mode"] = parse_mode
@@ -275,6 +432,10 @@ class Message(VKTeamsObject):
 
         If this message already lives in a thread, posts there instead.
         Returns a bound :class:`Message` — supports ``.delete()``, ``.edit_text()``.
+
+        Note:
+            VK Teams API returns only ``msgId`` on send. ``timestamp``,
+            ``from_user``, and ``parts`` will be ``None`` / empty.
         """
         if parse_mode is not _UNSET:
             kwargs["parse_mode"] = parse_mode
@@ -317,6 +478,10 @@ class Message(VKTeamsObject):
         Example::
 
             await message.reply("I see your message!")
+
+        Note:
+            VK Teams API returns only ``msgId`` on send. ``timestamp``,
+            ``from_user``, and ``parts`` will be ``None`` / empty.
         """
         if parse_mode is not _UNSET:
             kwargs["parse_mode"] = parse_mode
@@ -457,6 +622,10 @@ class Message(VKTeamsObject):
         Example::
 
             await message.answer_file(file=InputFile("report.pdf"), caption="Here!")
+
+        Note:
+            VK Teams API returns only ``msgId`` on send. ``timestamp``,
+            ``from_user``, and ``parts`` will be ``None`` / empty.
         """
         if parse_mode is not _UNSET:
             kwargs["parse_mode"] = parse_mode
@@ -495,6 +664,10 @@ class Message(VKTeamsObject):
 
             ogg = convert_to_ogg_opus("audio.mp3")
             await message.answer_voice(file=InputFile(ogg, filename="voice.ogg"))
+
+        Note:
+            VK Teams API returns only ``msgId`` on send. ``timestamp``,
+            ``from_user``, and ``parts`` will be ``None`` / empty.
         """
         if inline_keyboard_markup is not None:
             kwargs["inline_keyboard_markup"] = inline_keyboard_markup

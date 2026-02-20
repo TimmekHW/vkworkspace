@@ -678,12 +678,46 @@ await bot.pin_message(chat_id, msg_id)
 await bot.unpin_message(chat_id, msg_id)
 await bot.send_actions(chat_id, "typing")
 
-# Files & Threads
+# Files
 await bot.get_file_info(file_id)
-await bot.threads_add(chat_id, msg_id)
-await bot.threads_get_subscribers(thread_id)
-await bot.threads_autosubscribe(chat_id, enable=True)
+
+# Threads
+thread = await bot.threads_add(chat_id, msg_id)   # thread.thread_id — the thread's own chat ID
+await bot.threads_autosubscribe(chat_id, enable=True, with_existing=True)
 ```
+
+## Threads
+
+VK Teams threads work differently from Telegram topics — each thread gets its
+own **chat ID**.  Thread messages arrive as ordinary `newMessage` events but
+with `parent_topic` set.
+
+```python
+# Create a thread under a message
+thread = await bot.threads_add(chat_id, msg_id)
+# thread.thread_id = "XXXXXXX@chat.agent" — the new thread's own chat ID
+
+# Enable autosubscribe so the bot receives thread replies
+await bot.threads_autosubscribe(chat_id, enable=True)
+
+# Reply into a thread (convenience method)
+@router.message(Command("discuss"))
+async def start_thread(message: Message):
+    await message.answer_thread("Let's discuss here!")
+
+# Handle messages sent inside a thread
+@router.message(F.is_thread_message)
+async def on_thread_msg(message: Message):
+    # message.chat.chat_id          = thread's own chat ID
+    # message.thread_root_chat_id   = original group/channel chat ID
+    # message.thread_root_message_id = root message ID (int)
+    await message.answer("Saw your thread reply!")
+```
+
+> **Channel comments are thread messages.**
+> When a bot is added to a channel it automatically receives all post comments
+> as `newMessage` events with `is_thread_message == True` and
+> `thread_root_chat_id` equal to the channel's chat ID — no extra subscription needed.
 
 ## Handler Dependency Injection
 

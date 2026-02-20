@@ -53,9 +53,7 @@ class HandlerObject:
             else:
                 self._params.add(name)
 
-    async def check(
-        self, event: Any, kwargs: dict[str, Any]
-    ) -> tuple[bool, dict[str, Any]]:
+    async def check(self, event: Any, kwargs: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
         if not self.filters:
             return True, kwargs
 

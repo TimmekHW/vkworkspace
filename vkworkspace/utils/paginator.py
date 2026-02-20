@@ -118,27 +118,36 @@ class Paginator:
         buttons: list[InlineKeyboardButton] = []
 
         if self.has_prev:
-            buttons.append(InlineKeyboardButton(
-                text="◀",
-                callback_data=PaginationCB(
-                    name=self.name, page=self.current_page - 1,
-                ).pack(),
-            ))
+            buttons.append(
+                InlineKeyboardButton(
+                    text="◀",
+                    callback_data=PaginationCB(
+                        name=self.name,
+                        page=self.current_page - 1,
+                    ).pack(),
+                )
+            )
 
-        buttons.append(InlineKeyboardButton(
-            text=f"{self.current_page + 1}/{self.total_pages}",
-            callback_data=PaginationCB(
-                name=self.name, page=self.current_page,
-            ).pack(),
-        ))
+        buttons.append(
+            InlineKeyboardButton(
+                text=f"{self.current_page + 1}/{self.total_pages}",
+                callback_data=PaginationCB(
+                    name=self.name,
+                    page=self.current_page,
+                ).pack(),
+            )
+        )
 
         if self.has_next:
-            buttons.append(InlineKeyboardButton(
-                text="▶",
-                callback_data=PaginationCB(
-                    name=self.name, page=self.current_page + 1,
-                ).pack(),
-            ))
+            buttons.append(
+                InlineKeyboardButton(
+                    text="▶",
+                    callback_data=PaginationCB(
+                        name=self.name,
+                        page=self.current_page + 1,
+                    ).pack(),
+                )
+            )
 
         return buttons
 

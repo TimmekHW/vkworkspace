@@ -29,3 +29,4 @@ bench_report*.txt
 .claude/
 docs/*
 PRESENTATION.md
+scripts/full_test_bot.py

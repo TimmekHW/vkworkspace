@@ -79,7 +79,10 @@ class _Job(ABC):
 
     @abstractmethod
     async def run(
-        self, bot: Any, is_running: Callable[[], bool], extra: dict[str, Any],
+        self,
+        bot: Any,
+        is_running: Callable[[], bool],
+        extra: dict[str, Any],
     ) -> None:
         """Run the job loop until is_running() returns False."""
 
@@ -99,7 +102,10 @@ class _IntervalJob(_Job):
         self.run_at_start = run_at_start
 
     async def run(
-        self, bot: Any, is_running: Callable[[], bool], extra: dict[str, Any],
+        self,
+        bot: Any,
+        is_running: Callable[[], bool],
+        extra: dict[str, Any],
     ) -> None:
         if not self.run_at_start:
             await _interruptible_sleep(self.seconds, is_running)
@@ -127,7 +133,10 @@ class _DailyJob(_Job):
         self.minute = minute
 
     async def run(
-        self, bot: Any, is_running: Callable[[], bool], extra: dict[str, Any],
+        self,
+        bot: Any,
+        is_running: Callable[[], bool],
+        extra: dict[str, Any],
     ) -> None:
         while is_running():
             wait = _seconds_until(self.hour, self.minute)
@@ -162,7 +171,10 @@ class _WeeklyJob(_Job):
         self.minute = minute
 
     async def run(
-        self, bot: Any, is_running: Callable[[], bool], extra: dict[str, Any],
+        self,
+        bot: Any,
+        is_running: Callable[[], bool],
+        extra: dict[str, Any],
     ) -> None:
         while is_running():
             wait = _seconds_until_weekday(self.weekday, self.hour, self.minute)
@@ -232,9 +244,11 @@ class Scheduler:
             async def check_cpu(bot):
                 ...
         """
+
         def decorator(func: SchedulerFunc) -> SchedulerFunc:
             self._jobs.append(_IntervalJob(func, seconds, run_at_start, name))
             return func
+
         return decorator
 
     def daily(
@@ -256,9 +270,11 @@ class Scheduler:
             async def morning_report(bot):
                 ...
         """
+
         def decorator(func: SchedulerFunc) -> SchedulerFunc:
             self._jobs.append(_DailyJob(func, hour, minute, name))
             return func
+
         return decorator
 
     def weekly(
@@ -282,9 +298,11 @@ class Scheduler:
             async def friday_summary(bot):
                 ...
         """
+
         def decorator(func: SchedulerFunc) -> SchedulerFunc:
             self._jobs.append(_WeeklyJob(func, weekday, hour, minute, name))
             return func
+
         return decorator
 
     # ── lifecycle ─────────────────────────────────────────────────────
@@ -362,6 +380,7 @@ class Scheduler:
 
 # ── helpers ──────────────────────────────────────────────────────────
 
+
 async def _interruptible_sleep(
     seconds: float,
     is_running: Callable[[], bool],
@@ -390,7 +409,10 @@ def _seconds_until_weekday(weekday: int, hour: int, minute: int) -> float:
     if days_ahead < 0:
         days_ahead += 7
     target = now.replace(
-        hour=hour, minute=minute, second=0, microsecond=0,
+        hour=hour,
+        minute=minute,
+        second=0,
+        microsecond=0,
     ) + timedelta(days=days_ahead)
     if target <= now:
         target += timedelta(weeks=1)

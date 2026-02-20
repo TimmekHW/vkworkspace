@@ -93,8 +93,11 @@ class TestFromBase64:
 class TestFromUrl:
     @pytest.mark.asyncio
     async def test_downloads_and_wraps(self):
-        fake_resp = httpx.Response(200, content=b"image bytes",
-                                   request=httpx.Request("GET", "https://example.com/photo.jpg"))
+        fake_resp = httpx.Response(
+            200,
+            content=b"image bytes",
+            request=httpx.Request("GET", "https://example.com/photo.jpg"),
+        )
 
         with patch("vkworkspace.types.input_file.httpx.AsyncClient") as mock_cls:
             mock_client = AsyncMock()
@@ -111,8 +114,9 @@ class TestFromUrl:
 
     @pytest.mark.asyncio
     async def test_custom_filename_overrides(self):
-        fake_resp = httpx.Response(200, content=b"data",
-                                   request=httpx.Request("GET", "https://example.com/photo.jpg"))
+        fake_resp = httpx.Response(
+            200, content=b"data", request=httpx.Request("GET", "https://example.com/photo.jpg")
+        )
 
         with patch("vkworkspace.types.input_file.httpx.AsyncClient") as mock_cls:
             mock_client = AsyncMock()

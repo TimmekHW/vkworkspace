@@ -686,12 +686,45 @@ await bot.pin_message(chat_id, msg_id)
 await bot.unpin_message(chat_id, msg_id)
 await bot.send_actions(chat_id, "typing")
 
-# Файлы и треды
+# Файлы
 await bot.get_file_info(file_id)
-await bot.threads_add(chat_id, msg_id)
-await bot.threads_get_subscribers(thread_id)
-await bot.threads_autosubscribe(chat_id, enable=True)
+
+# Треды
+thread = await bot.threads_add(chat_id, msg_id)   # thread.thread_id — chat ID треда
+await bot.threads_autosubscribe(chat_id, enable=True, with_existing=True)
 ```
+
+## Треды
+
+В VK Teams каждый тред получает **собственный chat ID**.  Сообщения в треде
+приходят как обычные `newMessage`, но с заполненным полем `parent_topic`.
+
+```python
+# Создать тред под сообщением
+thread = await bot.threads_add(chat_id, msg_id)
+# thread.thread_id = "XXXXXXX@chat.agent" — chat ID нового треда
+
+# Включить автоподписку бота на треды
+await bot.threads_autosubscribe(chat_id, enable=True)
+
+# Ответить в тред (удобный метод)
+@router.message(Command("discuss"))
+async def start_thread(message: Message):
+    await message.answer_thread("Обсудим здесь!")
+
+# Обработать сообщения из треда
+@router.message(F.is_thread_message)
+async def on_thread_msg(message: Message):
+    # message.chat.chat_id           = собственный chat ID треда
+    # message.thread_root_chat_id    = chat ID исходного чата (группа/канал)
+    # message.thread_root_message_id = ID корневого сообщения (int)
+    await message.answer("Вижу ответ в треде!")
+```
+
+> **Комментарии к каналу — это тредовые сообщения.**
+> Когда бот добавлен в канал, он автоматически получает все комментарии к постам
+> как `newMessage` с `is_thread_message == True` и `thread_root_chat_id`
+> равным chat ID канала — никакой дополнительной подписки не нужно.
 
 ## Инъекция зависимостей в хендлеры
 

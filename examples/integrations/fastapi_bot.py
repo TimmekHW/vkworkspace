@@ -57,6 +57,7 @@ class FakeDB:
 
 # ── Middleware: inject dependencies into bot handlers ─────────────────
 
+
 class DepsMiddleware(BaseMiddleware):
     """Inject app dependencies into every bot handler.
 
@@ -87,6 +88,7 @@ class DepsMiddleware(BaseMiddleware):
 
 
 # ── FSM ──────────────────────────────────────────────────────────────
+
 
 class DutySwap(StatesGroup):
     confirm = State()
@@ -123,7 +125,10 @@ async def cmd_duty(message: Message, command: Any, db: FakeDB) -> None:
 
 @router.message(Command("swap"))
 async def cmd_swap(
-    message: Message, command: Any, db: FakeDB, state: FSMContext,
+    message: Message,
+    command: Any,
+    db: FakeDB,
+    state: FSMContext,
 ) -> None:
     """Start duty swap. `db` and `state` both injected."""
     args = (command.args or "").strip().split()

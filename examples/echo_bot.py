@@ -16,18 +16,13 @@ router = Router()
 
 @router.message(Command("start"))
 async def cmd_start(message: Message) -> None:
-    await message.answer(
-        "Hello! I'm an echo bot.\n"
-        "Send me any text and I'll repeat it back."
-    )
+    await message.answer("Hello! I'm an echo bot.\nSend me any text and I'll repeat it back.")
 
 
 @router.message(Command("help"))
 async def cmd_help(message: Message) -> None:
     await message.answer(
-        "Available commands:\n"
-        "/start - Start the bot\n"
-        "/help - Show this help message"
+        "Available commands:\n/start - Start the bot\n/help - Show this help message"
     )
 
 

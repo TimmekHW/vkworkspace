@@ -102,9 +102,7 @@ class Dispatcher(Router):
         self._running = False
         self._fsm_timestamps: dict[Any, float] = {}
 
-    def _resolve_event(
-        self, update: Update, bot: Any
-    ) -> tuple[str | None, Any, dict[str, Any]]:
+    def _resolve_event(self, update: Update, bot: Any) -> tuple[str | None, Any, dict[str, Any]]:
         payload = update.payload
         update_type = EVENT_TYPE_MAP.get(update.type)
 
@@ -118,8 +116,13 @@ class Dispatcher(Router):
             "event_type": update.type,
         }
 
-        if update_type in ("message", "edited_message", "deleted_message",
-                           "pinned_message", "unpinned_message"):
+        if update_type in (
+            "message",
+            "edited_message",
+            "deleted_message",
+            "pinned_message",
+            "unpinned_message",
+        ):
             msg = Message.model_validate(payload)
             msg.set_bot(bot)
             # Route edited messages to "message" handlers when flag is set
@@ -234,7 +237,7 @@ class Dispatcher(Router):
                 break
             except Exception as e:
                 consecutive_errors += 1
-                delay = min(2 ** consecutive_errors, 60)
+                delay = min(2**consecutive_errors, 60)
                 msg = "Polling error (%d): %s — retrying in %ds"
                 if consecutive_errors == 1:
                     logger.warning(msg, consecutive_errors, e, delay, exc_info=True)

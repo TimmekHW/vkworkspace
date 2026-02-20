@@ -27,6 +27,7 @@ from vkworkspace.utils.keyboard import InlineKeyboardBuilder
 
 # ── Pydantic models for data validation ──────────────────────────────
 
+
 class TaskPayload(BaseModel):
     chat_id: str
     text: str
@@ -53,6 +54,7 @@ listener = RedisListener(
 
 # ── Lifecycle hooks ──────────────────────────────────────────────────
 
+
 @listener.on_startup
 async def on_startup():
     me = await listener.bot.get_me()
@@ -65,6 +67,7 @@ async def on_shutdown():
 
 
 # ── Stream handlers ──────────────────────────────────────────────────
+
 
 @listener.handler("bot:tasks", model=TaskPayload)
 async def on_task(bot, data: TaskPayload):

@@ -1,4 +1,5 @@
 """Tests for FSM session timeout in FSMContextMiddleware."""
+
 from __future__ import annotations
 
 import time
