@@ -240,6 +240,22 @@ await message.answer("plain text", parse_mode=None)
 
 > **Tip:** IDE autocomplete works — type `parse_mode=ParseMode.` and your editor will suggest `HTML` and `MARKDOWNV2`.
 
+### Debug Logging
+
+One-liner to see all API calls and events:
+
+```python
+import vkworkspace
+vkworkspace.enable_debug()
+```
+
+Output:
+```
+14:32:01 [vkworkspace.client.bot] DEBUG: → self/get
+14:32:01 [vkworkspace.client.bot] DEBUG: ← self/get 200 (0.142s)
+14:32:02 [vkworkspace.dispatcher.dispatcher] DEBUG: Event: message from user@example.com
+```
+
 ## Dispatcher
 
 ```python

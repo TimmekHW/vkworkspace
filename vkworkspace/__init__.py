@@ -18,6 +18,8 @@ Usage::
         await dp.start_polling(bot)
 """
 
+import logging
+
 from vkworkspace.__meta__ import __version__
 from vkworkspace.client.bot import Bot
 from vkworkspace.dispatcher.dispatcher import Dispatcher
@@ -27,6 +29,35 @@ from vkworkspace.listener import RedisListener
 from vkworkspace.server import BotServer
 from vkworkspace.utils.magic_filter import F
 from vkworkspace.utils.scheduler import Scheduler
+
+logging.getLogger("vkworkspace").addHandler(logging.NullHandler())
+
+
+def enable_debug() -> None:
+    """Enable DEBUG logging for all vkworkspace components.
+
+    Adds a StreamHandler with a timestamped formatter to the
+    ``vkworkspace`` logger.  Call once at startup::
+
+        import vkworkspace
+        vkworkspace.enable_debug()
+    """
+    logger = logging.getLogger("vkworkspace")
+    logger.setLevel(logging.DEBUG)
+    if not any(
+        isinstance(h, logging.StreamHandler)
+        and not isinstance(h, logging.NullHandler)
+        for h in logger.handlers
+    ):
+        handler = logging.StreamHandler()
+        handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+                datefmt="%H:%M:%S",
+            )
+        )
+        logger.addHandler(handler)
+
 
 __all__ = [
     "BaseMiddleware",
@@ -38,4 +69,5 @@ __all__ = [
     "Router",
     "Scheduler",
     "__version__",
+    "enable_debug",
 ]
