@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.6] - 2026-02-28
+
+### Added
+- `vkworkspace.enable_debug()` — one-liner to enable DEBUG logging for all framework components (adds StreamHandler + sets level)
+- `NullHandler` on the `vkworkspace` root logger (PEP best practice for libraries)
+- `### Debug Logging` section in README
+
 ## [1.8.5] - 2026-02-27
 
 ### Fixed
