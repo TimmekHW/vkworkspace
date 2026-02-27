@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.5] - 2026-02-27
+
+### Fixed
+- **Ctrl+C on Linux**: polling tasks are now cancelled immediately on SIGINT/SIGTERM instead of waiting up to 60s for the long-poll to return
+- `Dispatcher.stop()` also cancels polling tasks (was only setting `_running = False`)
+
+### Added
+- DEBUG logging in `Bot._request()`: logs every API call with endpoint, HTTP status, and elapsed time (`→ send_text` / `← send_text 200 (0.142s)`)
+- DEBUG logging in `Dispatcher.feed_update()`: logs event type and sender on every incoming update
+
 ## [1.8.4] - 2026-02-20
 
 ### Added

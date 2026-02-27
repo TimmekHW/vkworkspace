@@ -192,6 +192,9 @@ class Bot:
         max_attempts = (self.retry_on_5xx or 0) + 1
         last_exc: Exception | None = None
 
+        t0 = time.monotonic()
+        logger.debug("→ %s", endpoint)
+
         for attempt in range(max_attempts):
             try:
                 if files:
@@ -201,6 +204,9 @@ class Bot:
 
                 resp.raise_for_status()
                 data: dict[str, Any] = resp.json()
+
+                elapsed = time.monotonic() - t0
+                logger.debug("← %s %d (%.3fs)", endpoint, resp.status_code, elapsed)
 
                 if data.get("ok") is False:
                     raise VKTeamsAPIError(

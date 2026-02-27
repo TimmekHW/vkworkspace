@@ -100,6 +100,7 @@ class Dispatcher(Router):
         self.handle_edited_as_message = handle_edited_as_message
         self.session_timeout = session_timeout
         self._running = False
+        self._polling_tasks: list[asyncio.Task[None]] = []
         self._fsm_timestamps: dict[Any, float] = {}
 
     def _resolve_event(self, update: Update, bot: Any) -> tuple[str | None, Any, dict[str, Any]]:
@@ -158,6 +159,9 @@ class Dispatcher(Router):
         update_type, event, extra = self._resolve_event(update, bot)
         if update_type is None:
             return UNHANDLED
+
+        from_user = getattr(event, "from_user", None)
+        logger.debug("Event: %s from %s", update_type, getattr(from_user, "user_id", "?"))
 
         # Inject FSM context
         from vkworkspace.fsm.context import FSMContext
@@ -298,8 +302,8 @@ class Dispatcher(Router):
                 for bot in bots:
                     await bot.get_events(poll_time=0)
 
-            tasks = [asyncio.create_task(self._polling(bot)) for bot in bots]
-            await asyncio.gather(*tasks)
+            self._polling_tasks = [asyncio.create_task(self._polling(bot)) for bot in bots]
+            await asyncio.gather(*self._polling_tasks)
         except asyncio.CancelledError:
             logger.info("Polling cancelled")
         finally:
@@ -312,6 +316,8 @@ class Dispatcher(Router):
     def _stop_signal(self) -> None:
         logger.info("Received stop signal")
         self._running = False
+        for task in self._polling_tasks:
+            task.cancel()
 
     @property
     def is_running(self) -> bool:
@@ -321,3 +327,5 @@ class Dispatcher(Router):
     async def stop(self) -> None:
         """Stop polling gracefully."""
         self._running = False
+        for task in self._polling_tasks:
+            task.cancel()
