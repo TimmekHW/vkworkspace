@@ -28,12 +28,49 @@ from __future__ import annotations
 
 from typing import Any
 
+# VK Teams mutually exclusive styles — overlapping ranges with these
+# style pairs are rejected by the server.
+_CONFLICTS: dict[str, frozenset[str]] = {
+    "bold": frozenset({"pre"}),
+    "italic": frozenset({"pre"}),
+    "underline": frozenset({"pre"}),
+    "strikethrough": frozenset({"pre"}),
+    "link": frozenset({"mention", "pre"}),
+    "mention": frozenset({"link", "pre"}),
+    "inlineCode": frozenset({"pre"}),
+    "pre": frozenset(
+        {
+            "bold",
+            "italic",
+            "underline",
+            "strikethrough",
+            "link",
+            "mention",
+            "inlineCode",
+            "orderedList",
+            "unorderedList",
+            "quote",
+        }
+    ),
+    "orderedList": frozenset({"pre", "unorderedList", "quote"}),
+    "unorderedList": frozenset({"pre", "orderedList", "quote"}),
+    "quote": frozenset({"pre", "orderedList", "unorderedList"}),
+}
+
+
+def _overlaps(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    """Return True if two offset/length spans overlap."""
+    return a["offset"] < b["offset"] + b["length"] and b["offset"] < a["offset"] + a["length"]
+
 
 class FormatBuilder:
     """Build a ``format`` dict for VK Teams ``messages/sendText``.
 
     Each method adds one or more spans (offset + length) to the format dict.
     Call :meth:`build` to get the final dict ready for ``format_=``.
+
+    :meth:`build` validates that no mutually exclusive styles overlap
+    (raises ``ValueError`` otherwise).
     """
 
     def __init__(self, text: str = "") -> None:
@@ -149,6 +186,44 @@ class FormatBuilder:
 
     # ── output ────────────────────────────────────────────────────
 
+    def validate(self) -> None:
+        """Check for mutually exclusive style overlaps.
+
+        Raises:
+            ValueError: If same-style spans overlap or conflicting
+                styles share overlapping ranges.
+        """
+        # 1. Same-style overlaps
+        for style, spans in self._spans.items():
+            for i, a in enumerate(spans):
+                for b in spans[i + 1 :]:
+                    if _overlaps(a, b):
+                        raise ValueError(
+                            f"Overlapping '{style}' ranges: "
+                            f"[{a['offset']}:{a['offset'] + a['length']}] "
+                            f"and [{b['offset']}:{b['offset'] + b['length']}]"
+                        )
+
+        # 2. Cross-style conflicts
+        styles = list(self._spans)
+        for i, s1 in enumerate(styles):
+            conflicts = _CONFLICTS.get(s1, frozenset())
+            for s2 in styles[i + 1 :]:
+                if s2 in conflicts:
+                    for a in self._spans[s1]:
+                        for b in self._spans[s2]:
+                            if _overlaps(a, b):
+                                raise ValueError(
+                                    f"Conflicting styles '{s1}' + '{s2}' "
+                                    f"overlap at [{a['offset']}:{a['offset'] + a['length']}] "
+                                    f"and [{b['offset']}:{b['offset'] + b['length']}]"
+                                )
+
     def build(self) -> dict[str, list[dict[str, Any]]]:
-        """Return the ``format`` dict ready for ``format_=``."""
+        """Return the ``format`` dict ready for ``format_=``.
+
+        Raises:
+            ValueError: If mutually exclusive styles overlap.
+        """
+        self.validate()
         return {k: list(v) for k, v in self._spans.items()}

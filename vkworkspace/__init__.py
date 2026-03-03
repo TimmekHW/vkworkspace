@@ -45,8 +45,7 @@ def enable_debug() -> None:
     logger = logging.getLogger("vkworkspace")
     logger.setLevel(logging.DEBUG)
     if not any(
-        isinstance(h, logging.StreamHandler)
-        and not isinstance(h, logging.NullHandler)
+        isinstance(h, logging.StreamHandler) and not isinstance(h, logging.NullHandler)
         for h in logger.handlers
     ):
         handler = logging.StreamHandler()

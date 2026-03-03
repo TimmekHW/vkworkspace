@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.7] - 2026-03-03
+
+### Added
+- `FormatBuilder.validate()` — checks for mutually exclusive style overlaps per VK Teams API rules (e.g. `pre` + `bold`, `link` + `mention`, `orderedList` + `unorderedList`)
+- `FormatBuilder.build()` now auto-validates before returning; raises `ValueError` on conflicts
+- Tests for `FormatBuilder` (20 test cases)
+
 ## [1.8.6] - 2026-02-28
 
 ### Added
