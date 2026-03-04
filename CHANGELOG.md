@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.8] - 2026-03-04
+
+### Fixed
+- `_request()` now retries on VK Teams `"Server error"` responses (HTTP 200 + `ok: false`) with the same exponential backoff as 5xx errors — applies to **all** API methods
+
 ## [1.8.7] - 2026-03-03
 
 ### Added

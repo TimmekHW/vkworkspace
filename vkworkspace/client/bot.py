@@ -209,10 +209,22 @@ class Bot:
                 logger.debug("← %s %d (%.3fs)", endpoint, resp.status_code, elapsed)
 
                 if data.get("ok") is False:
-                    raise VKTeamsAPIError(
-                        method=endpoint,
-                        message=data.get("description", "Unknown error"),
-                    )
+                    description = data.get("description", "Unknown error")
+                    err = VKTeamsAPIError(method=endpoint, message=description)
+                    # "Server error: id=0x..." = server-side crash, retry like 5xx
+                    if description.startswith("Server error") and attempt < max_attempts - 1:
+                        last_exc = err
+                        delay = min(2**attempt, 8)
+                        logger.warning(
+                            "Server error from %s (attempt %d/%d), retrying in %ds...",
+                            endpoint,
+                            attempt + 1,
+                            max_attempts,
+                            delay,
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    raise err
                 return data
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code < 500 or attempt >= max_attempts - 1:
