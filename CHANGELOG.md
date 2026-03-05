@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.9] - 2026-03-05
+
+### Improved
+- After all retry attempts exhausted on `"Server error"`, an **ERROR**-level log is now emitted with method name, attempt count, error description, and request params (token excluded) — makes debugging server-side failures much easier
+
 ## [1.8.8] - 2026-03-04
 
 ### Fixed
