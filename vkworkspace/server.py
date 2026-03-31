@@ -535,6 +535,11 @@ class BotServer:
 
     def _stop_signal(self) -> None:
         logger.info("Received stop signal")
+        # Remove custom handlers so next Ctrl+C force-kills the process
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            with contextlib.suppress(NotImplementedError):
+                loop.remove_signal_handler(sig)
         self.stop()
 
     def run(self, host: str | None = None, port: int | None = None) -> None:
