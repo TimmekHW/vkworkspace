@@ -231,7 +231,7 @@ class Bot:
                             endpoint,
                             max_attempts,
                             description,
-                            {k: v for k, v in params.items() if k != "token"},
+                            {k: v for k, v in (params or {}).items() if k != "token"},
                         )
                     raise err
                 return data
