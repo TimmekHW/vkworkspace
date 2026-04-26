@@ -807,6 +807,49 @@ class Bot:
         )
         return APIResponse.model_validate(data)
 
+    async def create_chat(
+        self,
+        name: str,
+        about: str = "",
+        rules: str = "",
+        members: list[str] | None = None,
+        public: bool = False,
+        join_moderation: bool = False,
+        default_role: str = "member",
+    ) -> dict[str, Any]:
+        """Create a new chat. ``chats/createChat``
+
+        Returns ``{"ok": True, "sn": "<chat_id>"}`` on success.
+
+        .. warning::
+           This endpoint is **myteam / on-premise only** and may be disabled
+           by the operator on a given installation. If your VK Teams /
+           myteam server returns ``"ok": false`` or 404, ask the integrators
+           to enable ``chats/createChat`` for your bot. Cloud myteam.mail.ru
+           does not expose this method to bots.
+
+        :param name: Chat title.
+        :param about: Description.
+        :param rules: Chat rules text.
+        :param members: Initial members (user IDs / emails).
+        :param public: Public group (joinable by link).
+        :param join_moderation: Require admin approval to join.
+        :param default_role: Default role for new members
+            (``"member"`` / ``"readonly"`` / ``"admin"``).
+        """
+        return await self._request(
+            "chats/createChat",
+            self._params(
+                name=name,
+                about=about,
+                rules=rules,
+                members=[{"sn": m} for m in (members or [])],
+                public=public,
+                joinModeration=join_moderation,
+                defaultRole=default_role,
+            ),
+        )
+
     async def set_chat_avatar(
         self,
         chat_id: str,

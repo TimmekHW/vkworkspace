@@ -1,7 +1,7 @@
 # vkworkspace — Complete LLM Reference
 
 > Async Python framework for VK Teams (VK Workspace) bots, inspired by aiogram 3.
-> Version 1.8.3 · Python 3.11+ · `pip install vkworkspace`
+> Version 1.8.9 · Python 3.11+ · `pip install vkworkspace`
 
 **Этот файл — полная справка по фреймворку vkworkspace.**
 Отдайте его целиком в ChatGPT, Claude или любую другую LLM и попросите написать бота — модель сможет использовать все возможности фреймворка без дополнительной документации.
@@ -83,6 +83,7 @@ bot = Bot(
 | `await bot.set_chat_rules(...)` → `APIResponse` | `chats/setRules` | Set chat rules |
 | `await bot.delete_chat_members(...)` → `APIResponse` | `chats/members/delete` | Remove members from chat |
 | `await bot.add_chat_members(...)` → `APIResponse` | `chats/members/add` | Add members to chat |
+| `await bot.create_chat(...)` → `dict[str, Any]` | `chats/createChat` | Create a new chat |
 | `await bot.set_chat_avatar(...)` → `APIResponse` | `chats/avatar/set` | Set chat avatar |
 | `await bot.send_actions(...)` → `APIResponse` | `chats/sendActions` | Send chat actions (typing, looking) |
 | `await bot.pin_message(...)` → `APIResponse` | `chats/pinMessage` | Pin a message |
@@ -139,6 +140,26 @@ await bot.edit_text(
     parse_mode=...,              # "HTML" / "MarkdownV2" / None
     format_=None,                # offset/length formatting
 )
+```
+
+### Chat creation (myteam / on-premise only)
+
+```python
+# create_chat is available only on myteam / on-premise installations
+# and may be disabled by the operator. On cloud myteam.mail.ru bots cannot
+# create chats. If "ok": false / 404 — ask integrators to enable
+# chats/createChat for your bot.
+resp = await bot.create_chat(
+    name="Incident #42",
+    members=["dev1@corp.ru", "ops@corp.ru"],
+    about="Investigation of CPU>95% alert",
+    public=False,
+    join_moderation=False,
+    default_role="member",   # "member" | "readonly" | "admin"
+)
+# → {"ok": True, "sn": "<chat_id>"}
+chat_id = resp["sn"]
+await bot.send_text(chat_id, "Chat created, on-call invited")
 ```
 
 ### Proxy & Rate Limiting
@@ -216,10 +237,13 @@ router = Router()
 
 ```python
 from vkworkspace import F
-from vkworkspace.filters import Command, ChatTypeFilter, CallbackData, CallbackDataFactory
-from vkworkspace.filters.state import StateFilter
-from vkworkspace.filters.regexp import RegexpFilter
-from vkworkspace.filters.message_parts import ReplyFilter, ForwardFilter
+from vkworkspace.filters import (
+    Command, ChatTypeFilter, CallbackData, CallbackDataFactory, CallbackDataRegexpFilter,
+    StateFilter, RegexpFilter,
+    ReplyFilter, ForwardFilter, RegexpPartsFilter,
+    FileFilter, ImageFilter, VideoFilter, AudioFilter, VoiceFilter, StickerFilter,
+    MentionFilter, SenderFilter, URLFilter,
+)
 ```
 
 ### Magic Filter (F)
@@ -278,11 +302,39 @@ command.match    # re.Match | None — regex match (when using regex commands)
 # Reply / Forward
 @router.message(ReplyFilter())     # message is a reply
 @router.message(ForwardFilter())   # message is forwarded
+@router.message(RegexpPartsFilter(r"urgent|asap"))  # regex on text inside reply/forward
+
+# Attachments — file kind / sticker / voice
+@router.message(FileFilter())      # any file
+@router.message(ImageFilter())     # image only
+@router.message(VideoFilter())     # video only
+@router.message(AudioFilter())     # audio only
+@router.message(VoiceFilter())     # voice message
+@router.message(StickerFilter())   # sticker
+
+# Mentions — any or specific user
+@router.message(MentionFilter())                # any @mention
+@router.message(MentionFilter("alice@corp"))    # mention of specific user
+
+# Sender — single user_id or list
+@router.message(SenderFilter("admin@corp"))
+@router.message(SenderFilter(["alice@corp", "bob@corp"]))
+
+# URL detection (http/https/www) — captured into kwargs
+@router.message(URLFilter())
+async def on_url(message: Message, url: str):
+    await message.answer(f"Found a link: {url}")
+
+# Callback data regex with captured groups
+@router.callback_query(CallbackDataRegexpFilter(r"^order:(\d+)$"))
+async def on_order(query: CallbackQuery, regexp_match):
+    order_id = regexp_match.group(1)
 
 # Combine filters
 @router.message(Command("start"), ChatTypeFilter("private"))  # AND
 @router.message(Command("a") | Command("b"))                  # OR
 @router.message(~Command("start"))                             # NOT
+@router.message(SenderFilter("admin@corp") & ImageFilter())   # admin uploads image
 ```
 
 ### Custom Filters
@@ -347,27 +399,17 @@ async def handler(message: Message):
     message.reply_to        # ReplyMessagePayload | None
     message.forwards        # list[ReplyMessagePayload]
     message.files           # list[FilePayload]
-    message.caption         # str | None — file caption (VK Teams hides it in parts)
-    message.content         # str | None — text or caption, whichever is set
-    message.is_edited       # bool — True if editedTimestamp is set
-    message.sticker         # FilePayload | None — sticker attachment
-    message.voice           # FilePayload | None — voice attachment
-    message.inline_keyboard # list[list[dict]] | None — echoed keyboard (in callbackQuery)
-    message.is_thread_message       # bool
-    message.thread_root_chat_id     # str | None — original chat ID (for thread messages)
-    message.thread_root_message_id  # int | None — root message ID (for thread messages)
 
-    # Actions — answer/reply/answer_file/answer_voice return a bound Message
-    sent = await message.answer("text")       # → Message (can .delete() / .edit_text())
-    await message.reply("quoted reply")       # reply with quote → Message
-    await message.answer_thread("in thread")  # create/reply in thread → Message
+    # Actions
+    await message.answer("text")              # reply in same chat
+    await message.reply("quoted reply")       # reply with quote
+    await message.answer_thread("in thread")  # create/reply in thread
     await message.edit_text("new text")       # edit this message
     await message.delete()                    # delete this message
-    await sent.delete()                       # delete the sent message
     await message.pin()                       # pin
     await message.unpin()                     # unpin
-    await message.answer_file(file=InputFile("doc.pdf"))   # → Message
-    await message.answer_voice(file=InputFile(ogg_bytes, filename="voice.ogg"))  # → Message
+    await message.answer_file(file=InputFile("doc.pdf"))
+    await message.answer_voice(file=InputFile(ogg_bytes, filename="voice.ogg"))
     await message.answer_chat_action()        # one-shot "typing..."
 
     # Typing indicator while processing

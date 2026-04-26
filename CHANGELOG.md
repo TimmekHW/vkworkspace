@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.9.0] - 2026-04-26
+
+### Added
+- **`Bot.create_chat()`** — `chats/createChat` endpoint (myteam / on-premise only). Creates a new chat with title, description, rules, initial members, public/private flag, join moderation and default role. Includes explicit warning in docstring: may be disabled by the operator on a given installation, cloud myteam.mail.ru bots cannot create chats. Brings vkworkspace to **100% Bot API parity** with the official Mail.ru `bot-python` library.
+- **10 new named filter classes** in `vkworkspace.filters`:
+  - `FileFilter`, `ImageFilter`, `VideoFilter`, `AudioFilter`, `VoiceFilter` — match messages by attachment kind
+  - `StickerFilter` — match sticker messages
+  - `MentionFilter(user_id=None)` — match any `@mention` or a specific user
+  - `SenderFilter(user_id)` — match by `from_user.user_id` (single ID or list)
+  - `URLFilter` — detect `http(s)://` / `www.` links in `text`, captured into handler kwargs as `url`
+  - `CallbackDataRegexpFilter(pattern)` — regex match on `callback_data`, captures `re.Match` into handler kwargs as `regexp_match`
+- New example: `examples/features/filters.py` — demonstrates all built-in filters and composition.
+- Documentation updates: `README.md`, `README_RU.md`, `examples/README.md`, and `llm_full.md` (regenerated via `scripts/gen_llm_ref.py`) all describe the new filters and `create_chat`.
+
 ## [1.8.9] - 2026-03-05
 
 ### Improved

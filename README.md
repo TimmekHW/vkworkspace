@@ -95,7 +95,7 @@ VK Teams bots spend 99% of their time waiting for the network. Synchronous frame
 - **100% async** — `httpx` + `asyncio`, zero blocking calls, real concurrency
 - **Aiogram-like API** — `Router`, `Dispatcher`, `F` magic filters, middleware, FSM
 - **Type-safe** — Pydantic v2 models for all API types, full type hints
-- **Flexible filtering** — `Command`, `StateFilter`, `ChatTypeFilter`, `CallbackData`, `ReplyFilter`, `ForwardFilter`, regex, magic filters
+- **Flexible filtering** — `Command`, `StateFilter`, `ChatTypeFilter`, `CallbackData`, `Reply/Forward/File/Image/Video/Audio/Voice/Sticker/Mention/Sender/URL` filters, regex, magic filters
 - **Custom command prefixes** — `Command("start", prefix=("/", "!", ""))` for any prefix style
 - **FSM** — Finite State Machine with Memory and Redis storage backends
 - **Middleware** — inner/outer middleware pipeline for logging, auth, throttling
@@ -385,13 +385,20 @@ from vkworkspace.filters.state import StateFilter
 
 ```python
 from vkworkspace.filters import (
-    CallbackData, ChatTypeFilter, RegexpFilter,
+    CallbackData, CallbackDataRegexpFilter, ChatTypeFilter, RegexpFilter,
     ReplyFilter, ForwardFilter, RegexpPartsFilter,
+    FileFilter, ImageFilter, VideoFilter, AudioFilter, VoiceFilter, StickerFilter,
+    MentionFilter, SenderFilter, URLFilter,
 )
 
 # Callback data
 @router.callback_query(CallbackData("confirm"))
 @router.callback_query(CallbackData(re.compile(r"^action_\d+$")))
+
+# Callback data regex with captured groups
+@router.callback_query(CallbackDataRegexpFilter(r"^order:(\d+)$"))
+async def on_order(query, regexp_match) -> None:
+    order_id = regexp_match.group(1)
 
 # Chat type
 @router.message(ChatTypeFilter("private"))
@@ -409,8 +416,30 @@ from vkworkspace.filters import (
 async def on_urgent(message: Message, regexp_parts_match) -> None:
     await message.answer("Forwarded message contains urgent text!")
 
+# Attachments by kind
+@router.message(FileFilter())     # any file
+@router.message(ImageFilter())    # image only
+@router.message(VideoFilter())    # video only
+@router.message(AudioFilter())    # audio only
+@router.message(VoiceFilter())    # voice message
+@router.message(StickerFilter()) # sticker
+
+# Mentions — any or specific user
+@router.message(MentionFilter())                # any @mention
+@router.message(MentionFilter("alice@corp"))    # mention of specific user
+
+# Sender — single user or list
+@router.message(SenderFilter("admin@corp"))
+@router.message(SenderFilter(["alice@corp", "bob@corp"]))
+
+# URL detection (http/https/www) → captured into kwargs
+@router.message(URLFilter())
+async def on_url(message: Message, url: str) -> None:
+    await message.answer(f"Found link: {url}")
+
 # Combine filters with &, |, ~
 @router.message(ChatTypeFilter("private") & Command("secret"))
+@router.message(SenderFilter("admin@corp") & ImageFilter())
 ```
 
 ### Custom Filters
@@ -690,6 +719,9 @@ await bot.unblock_user(chat_id, user_id)
 await bot.resolve_pending(chat_id, approve=True, user_id=uid)
 await bot.add_chat_members(chat_id, members=[uid1, uid2])              # Add members
 await bot.delete_chat_members(chat_id, members=[uid1, uid2])           # Remove members
+# create_chat — myteam / on-premise only; may be disabled on your installation.
+# If "ok": false / 404 — ask integrators to enable chats/createChat for your bot.
+resp = await bot.create_chat(name="Incident #42", members=[uid1, uid2])  # → {"ok": true, "sn": "..."}
 await bot.pin_message(chat_id, msg_id)
 await bot.unpin_message(chat_id, msg_id)
 await bot.send_actions(chat_id, "typing")

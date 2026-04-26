@@ -15,6 +15,7 @@ python examples/echo_bot.py
 | Example | What it shows |
 |---------|---------------|
 | [keyboards.py](features/keyboards.py) | Inline keyboards, callbacks, `CallbackDataFactory`, pagination |
+| [filters.py](features/filters.py) | All built-in filters: file/image/video/audio/voice/sticker, mention, sender, URL, callback-data regex |
 | [formatting.py](features/formatting.py) | `md.*`, `html.*`, `Bold(...)`, `FormatBuilder`, `split_text` |
 | [fsm.py](features/fsm.py) | Finite State Machine for multi-step dialogs |
 | [files.py](features/files.py) | 8 ways to send files + voice conversion |

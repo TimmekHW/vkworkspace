@@ -95,7 +95,7 @@ Framework overhead — **НОЛЬ** в реальных условиях. Сет
 - **100% async** — `httpx` + `asyncio`, ноль блокирующих вызовов, реальная конкурентность
 - **API как в aiogram** — `Router`, `Dispatcher`, магический фильтр `F`, middleware, FSM
 - **Типобезопасность** — Pydantic v2 модели для всех типов API, полные type hints
-- **Гибкая фильтрация** — `Command`, `StateFilter`, `ChatTypeFilter`, `CallbackData`, `ReplyFilter`, `ForwardFilter`, regex, магические фильтры
+- **Гибкая фильтрация** — `Command`, `StateFilter`, `ChatTypeFilter`, `CallbackData`, фильтры `Reply/Forward/File/Image/Video/Audio/Voice/Sticker/Mention/Sender/URL`, regex, магические фильтры
 - **Кастомные префиксы команд** — `Command("start", prefix=("/", "!", ""))` для любого стиля
 - **FSM** — конечный автомат состояний с бэкендами Memory и Redis
 - **Middleware** — пайплайн inner/outer для логирования, авторизации, троттлинга
@@ -368,13 +368,20 @@ from vkworkspace.filters.state import StateFilter
 
 ```python
 from vkworkspace.filters import (
-    CallbackData, ChatTypeFilter, RegexpFilter,
+    CallbackData, CallbackDataRegexpFilter, ChatTypeFilter, RegexpFilter,
     ReplyFilter, ForwardFilter, RegexpPartsFilter,
+    FileFilter, ImageFilter, VideoFilter, AudioFilter, VoiceFilter, StickerFilter,
+    MentionFilter, SenderFilter, URLFilter,
 )
 
 # Callback data
 @router.callback_query(CallbackData("confirm"))
 @router.callback_query(CallbackData(re.compile(r"^action_\d+$")))
+
+# Regex по callback_data с захватом групп
+@router.callback_query(CallbackDataRegexpFilter(r"^order:(\d+)$"))
+async def on_order(query, regexp_match) -> None:
+    order_id = regexp_match.group(1)
 
 # Тип чата
 @router.message(ChatTypeFilter("private"))
@@ -391,6 +398,27 @@ from vkworkspace.filters import (
 @router.message(RegexpPartsFilter(r"срочно|asap"))
 async def on_urgent(message: Message, regexp_parts_match) -> None:
     await message.answer("В пересланном сообщении найден срочный текст!")
+
+# Вложения по типу
+@router.message(FileFilter())     # любой файл
+@router.message(ImageFilter())    # только изображение
+@router.message(VideoFilter())    # только видео
+@router.message(AudioFilter())    # только аудио
+@router.message(VoiceFilter())    # голосовое сообщение
+@router.message(StickerFilter()) # стикер
+
+# Упоминания — любые или конкретного пользователя
+@router.message(MentionFilter())                # любое @упоминание
+@router.message(MentionFilter("alice@corp"))    # упоминание конкретного юзера
+
+# Отправитель — один user_id или список
+@router.message(SenderFilter("admin@corp"))
+@router.message(SenderFilter(["alice@corp", "bob@corp"]))
+
+# Детекция URL (http/https/www) → попадает в kwargs
+@router.message(URLFilter())
+async def on_url(message: Message, url: str) -> None:
+    await message.answer(f"Найдена ссылка: {url}")
 
 # Комбинирование фильтров через &, |, ~
 @router.message(ChatTypeFilter("private") & Command("secret"))
@@ -682,6 +710,9 @@ await bot.unblock_user(chat_id, user_id)
 await bot.resolve_pending(chat_id, approve=True, user_id=uid)
 await bot.add_chat_members(chat_id, members=[uid1, uid2])                  # Добавить участников
 await bot.delete_chat_members(chat_id, members=[uid1, uid2])               # Удалить участников
+# create_chat — только myteam / on-premise; на конкретной инсталляции может быть отключён.
+# Если "ok": false / 404 — попросите интеграторов включить chats/createChat для вашего бота.
+resp = await bot.create_chat(name="Инцидент #42", members=[uid1, uid2])    # → {"ok": true, "sn": "..."}
 await bot.pin_message(chat_id, msg_id)
 await bot.unpin_message(chat_id, msg_id)
 await bot.send_actions(chat_id, "typing")

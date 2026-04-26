@@ -417,6 +417,26 @@ await bot.edit_text(
 )
 ```
 
+### Chat creation (myteam / on-premise only)
+
+```python
+# create_chat is available only on myteam / on-premise installations
+# and may be disabled by the operator. On cloud myteam.mail.ru bots cannot
+# create chats. If "ok": false / 404 — ask integrators to enable
+# chats/createChat for your bot.
+resp = await bot.create_chat(
+    name="Incident #42",
+    members=["dev1@corp.ru", "ops@corp.ru"],
+    about="Investigation of CPU>95% alert",
+    public=False,
+    join_moderation=False,
+    default_role="member",   # "member" | "readonly" | "admin"
+)
+# → {{"ok": True, "sn": "<chat_id>"}}
+chat_id = resp["sn"]
+await bot.send_text(chat_id, "Chat created, on-call invited")
+```
+
 ### Proxy & Rate Limiting
 
 ```python
@@ -501,10 +521,13 @@ FILTERS = """\
 
 ```python
 from vkworkspace import F
-from vkworkspace.filters import Command, ChatTypeFilter, CallbackData, CallbackDataFactory
-from vkworkspace.filters.state import StateFilter
-from vkworkspace.filters.regexp import RegexpFilter
-from vkworkspace.filters.message_parts import ReplyFilter, ForwardFilter
+from vkworkspace.filters import (
+    Command, ChatTypeFilter, CallbackData, CallbackDataFactory, CallbackDataRegexpFilter,
+    StateFilter, RegexpFilter,
+    ReplyFilter, ForwardFilter, RegexpPartsFilter,
+    FileFilter, ImageFilter, VideoFilter, AudioFilter, VoiceFilter, StickerFilter,
+    MentionFilter, SenderFilter, URLFilter,
+)
 ```
 
 ### Magic Filter (F)
@@ -563,11 +586,39 @@ command.match    # re.Match | None — regex match (when using regex commands)
 # Reply / Forward
 @router.message(ReplyFilter())     # message is a reply
 @router.message(ForwardFilter())   # message is forwarded
+@router.message(RegexpPartsFilter(r"urgent|asap"))  # regex on text inside reply/forward
+
+# Attachments — file kind / sticker / voice
+@router.message(FileFilter())      # any file
+@router.message(ImageFilter())     # image only
+@router.message(VideoFilter())     # video only
+@router.message(AudioFilter())     # audio only
+@router.message(VoiceFilter())     # voice message
+@router.message(StickerFilter())   # sticker
+
+# Mentions — any or specific user
+@router.message(MentionFilter())                # any @mention
+@router.message(MentionFilter("alice@corp"))    # mention of specific user
+
+# Sender — single user_id or list
+@router.message(SenderFilter("admin@corp"))
+@router.message(SenderFilter(["alice@corp", "bob@corp"]))
+
+# URL detection (http/https/www) — captured into kwargs
+@router.message(URLFilter())
+async def on_url(message: Message, url: str):
+    await message.answer(f"Found a link: {url}")
+
+# Callback data regex with captured groups
+@router.callback_query(CallbackDataRegexpFilter(r"^order:(\\d+)$"))
+async def on_order(query: CallbackQuery, regexp_match):
+    order_id = regexp_match.group(1)
 
 # Combine filters
 @router.message(Command("start"), ChatTypeFilter("private"))  # AND
 @router.message(Command("a") | Command("b"))                  # OR
 @router.message(~Command("start"))                             # NOT
+@router.message(SenderFilter("admin@corp") & ImageFilter())   # admin uploads image
 ```
 
 ### Custom Filters
