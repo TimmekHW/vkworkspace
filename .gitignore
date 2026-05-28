@@ -31,3 +31,38 @@ docs/*
 PRESENTATION.md
 scripts/full_test_bot.py
 scripts/button_test.py
+
+# ── Safety net for secrets — never commit these ─────────────────────────
+.env
+.env.*
+*.env
+.envrc
+
+# Personal / local-only scripts (never published)
+*.local.py
+*_local.py
+*_private.py
+local_*.py
+test_live*.py
+private_*.py
+
+# Credentials / tokens / keys (any file with these names)
+*secret*
+*credentials*
+*credential*
+*token*
+*.key
+*.pem
+*.p12
+*.pfx
+*.cer
+*.crt
+config.json
+config.local.*
+settings.local.*
+
+# Internal docs — anything explicitly marked private/internal
+*_internal.md
+*_private.md
+INTERNAL_*
+PRIVATE_*
