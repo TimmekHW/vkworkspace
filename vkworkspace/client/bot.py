@@ -797,7 +797,15 @@ class Bot:
         chat_id: str,
         members: list[str],
     ) -> APIResponse:
-        """Add members to chat. ``chats/members/add``"""
+        """Add members to chat. ``chats/members/add``
+
+        .. warning::
+           Private (myteam_only) endpoint — disabled by default for new
+           bots. If the server returns ``"Method not allowed"``, ask
+           your platform admin / integrators to enable
+           ``chats/members/add`` for this bot. See :meth:`create_chat`
+           for the full ACL explanation.
+        """
         data = await self._request(
             "chats/members/add",
             self._params(
@@ -820,22 +828,50 @@ class Bot:
         """Create a new chat. ``chats/createChat``
 
         Returns ``{"ok": True, "sn": "<chat_id>"}`` on success.
+        The returned ``sn`` is the new chat's ID — use it as ``chat_id``
+        on subsequent ``/chats/*`` and ``/messages/*`` calls.
 
         .. warning::
-           This endpoint is **myteam / on-premise only** and may be disabled
-           by the operator on a given installation. If your VK Teams /
-           myteam server returns ``"ok": false`` or 404, ask the integrators
-           to enable ``chats/createChat`` for your bot. Cloud myteam.mail.ru
-           does not expose this method to bots.
+           This is a **private (myteam_only) endpoint**. It is available
+           on the server but disabled by default for new bots.
 
-        :param name: Chat title.
+           If the server returns ``{"ok": false, "description":
+           "Method not allowed"}``, it means **the endpoint exists but
+           your bot is not on the allowlist** — ask the platform admin
+           or your integrator team to enable ``chats/createChat`` for
+           this bot. (Distinct from ``"Unknown method"``, which would
+           mean the endpoint doesn't exist on the server at all.)
+
+           - Cloud ``myteam.mail.ru``: enable via MetaBot, or by request
+             to Mail.ru support if MetaBot's toggle is insufficient.
+           - On-premises: open a ticket with your integrators (in
+             Sovcombank — the «Доступы → VK Teams» Pyrus form).
+
+        :param name: Chat title (required).
         :param about: Description.
-        :param rules: Chat rules text.
-        :param members: Initial members (user IDs / emails).
-        :param public: Public group (joinable by link).
-        :param join_moderation: Require admin approval to join.
-        :param default_role: Default role for new members
-            (``"member"`` / ``"readonly"`` / ``"admin"``).
+        :param rules: Chat rules text shown to new members.
+        :param members: Initial members (user IDs / emails). Each is
+            wire-encoded as ``{"sn": id}``.
+        :param public: Public group, joinable by link.
+        :param join_moderation: Joining requires admin approval.
+        :param default_role: Default role for new members. **Only two
+            values are accepted by the server**:
+
+            - ``"member"`` — regular group chat (default).
+            - ``"readonly"`` — channel: non-admin members can only read.
+
+            Other strings (``"admin"``, ``"moder"``, etc.) are
+            **silently ignored or rejected** — there is no way to grant
+            admin/moderator rights via this parameter. Per Bot API
+            i18n strings (``teams.vk.com/botapi/lang_config_en.json``):
+            *"Should chat be group or channel ('member' for group,
+            'readonly' for channel)"*.
+
+            To grant admin to an existing member, see the on-premises
+            ``rapi/modChatMember`` workaround documented at
+            https://workspace.vk.ru/docs/on-premises/vk-teams/faq-exploitation/
+            (server-side, requires ``admin_key`` — not callable from
+            a bot token).
         """
         return await self._request(
             "chats/createChat",
@@ -896,6 +932,18 @@ class Bot:
         return File.model_validate(data)
 
     # ── Threads ───────────────────────────────────────────────────────
+    #
+    # All three thread endpoints are undocumented in the public OpenAPI
+    # spec at teams.vk.com/botapi/ but present in the official Mail.ru
+    # bot-python library and confirmed working on modern VK Teams
+    # servers (cloud myteam.mail.ru, recent paid on-premises builds).
+    #
+    # On legacy / older on-premises installations one or more thread
+    # methods may return ``"Unknown method"`` — that's a server build
+    # issue (the method isn't compiled in), not a bot permission. Ask
+    # your platform admin to upgrade the server. Distinct from
+    # ``"Method not allowed"`` which is ACL-gated and fixable by
+    # toggling the bot's allowlist.
 
     async def threads_get_subscribers(
         self,
@@ -903,7 +951,10 @@ class Bot:
         page_size: int | None = None,
         cursor: str | None = None,
     ) -> ThreadSubscribers:
-        """Get thread subscribers. ``threads/subscribers/get``"""
+        """Get thread subscribers. ``threads/subscribers/get``
+
+        See module-level Threads note for availability caveats.
+        """
         data = await self._request(
             "threads/subscribers/get",
             self._params(
@@ -920,7 +971,14 @@ class Bot:
         enable: bool,
         with_existing: bool = False,
     ) -> APIResponse:
-        """Toggle thread autosubscribe. ``threads/autosubscribe``"""
+        """Toggle thread autosubscribe. ``threads/autosubscribe``
+
+        Enable / disable automatic subscription to every new thread in
+        the chat. ``with_existing=True`` also retroactively subscribes
+        members to all existing threads in the chat.
+
+        See module-level Threads note for availability caveats.
+        """
         data = await self._request(
             "threads/autosubscribe",
             self._params(
@@ -932,7 +990,15 @@ class Bot:
         return APIResponse.model_validate(data)
 
     async def threads_add(self, chat_id: str, msg_id: str) -> Thread:
-        """Create thread from message. ``threads/add``"""
+        """Create thread from message. ``threads/add``
+
+        Anchor a new thread to the message ``msg_id`` in chat ``chat_id``.
+        Returns ``Thread`` with ``thread_id`` (the thread's own chat ID,
+        format ``XXXXXXXXX@chat.agent``). To post into the thread later,
+        use :meth:`send_text` with ``parent_topic``.
+
+        See module-level Threads note for availability caveats.
+        """
         data = await self._request(
             "threads/add",
             self._params(chatId=chat_id, msgId=msg_id),
