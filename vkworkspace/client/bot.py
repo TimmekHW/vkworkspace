@@ -226,8 +226,7 @@ class Bot:
                             await asyncio.sleep(delay)
                             continue
                         logger.error(
-                            "Server error from %s persisted after %d attempts: %s "
-                            "(params: %s)",
+                            "Server error from %s persisted after %d attempts: %s (params: %s)",
                             endpoint,
                             max_attempts,
                             description,
@@ -675,7 +674,30 @@ class Bot:
         return ChatInfo.model_validate(data)
 
     async def get_chat_admins(self, chat_id: str) -> list[ChatMember]:
-        """Get chat admins. ``chats/getAdmins``"""
+        """Get chat admins. ``chats/getAdmins`` (read-only).
+
+        Returns the list of users with ``admin`` / ``creator`` role in the
+        chat. Each :class:`ChatMember` carries ``admin`` / ``creator`` flags.
+
+        .. note::
+            Bot API has **no admin-grant counterpart** — there is no
+            ``chats/setAdmin``, ``chats/setRole``, ``chats/promote*`` or
+            ``chats/grantAdmin`` method. Verified against the canonical
+            Swagger spec, ``mail-ru-im/bot-golang`` upstream docs, full git
+            history of all official SDKs, Wayback ``api.yaml`` snapshots
+            2020–2024, Sourcegraph global code search, and live
+            brute-force of ~130 candidate paths against the public
+            endpoint (all returned the same ``"Unknown method"`` baseline).
+
+            The only programmatic promotion path is the on-premises
+            ``rapi/modChatMember`` call on the **internal** host, which
+            requires the server's ``admin_key`` from
+            ``/usr/local/etc/import_prismtokens.yaml`` (NOT a bot token).
+            Bot-side ACL for private flows is gated by per-feature
+            ``stdb`` tables (``bots_can_write_first``,
+            ``bots_can_send_deeplink``, …), not a single
+            ``bot_api_private_methods`` table.
+        """
         data = await self._request(
             "chats/getAdmins",
             self._params(chatId=chat_id),
