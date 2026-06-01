@@ -10,7 +10,7 @@ A modern replacement for the official [mail-ru-im/bot-python](https://github.com
 [![Downloads/month](https://img.shields.io/pypi/dm/vkworkspace.svg)](https://pypi.org/project/vkworkspace/)
 [![Downloads](https://static.pepy.tech/badge/vkworkspace)](https://pepy.tech/projects/vkworkspace)
 
-> **[README на русском языке](https://github.com/TimmekHW/vkworkspace/blob/main/README_RU.md)**
+> **[README на русском языке](https://github.com/TimmekHW/vkworkspace/blob/main/README_ru.md)**
 
 > **🤖 LLM-Assisted Development:** Feed [`llm_full.md`](https://github.com/TimmekHW/vkworkspace/blob/main/llm_full.md) to any LLM (ChatGPT, Claude, Gemini, etc.) and it will know the entire framework API — write handlers, keyboards, FSM dialogs, middleware, and more without reading the docs.
 
