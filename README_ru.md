@@ -204,13 +204,58 @@ bot = Bot(token="TOKEN", api_url="URL", retry_on_5xx=3)    # 3 ретрая (п�
 bot = Bot(token="TOKEN", api_url="URL", retry_on_5xx=None)  # Отключено
 ```
 
-### SSL-верификация
+### SSL-верификация (Минцифры / приватный CA)
 
-На on-premise инсталляциях с самоподписанными сертификатами можно отключить проверку SSL:
+`verify_ssl` принимает `bool`, **путь к PEM-бандлу CA** или готовый
+`ssl.SSLContext`. Корпоративные `*.sovcombank.ru` / on-premise серверы VK Teams
+обычно стоят за CA **Минцифры** — доверьте его, а не отключайте проверку:
 
 ```python
+from vkworkspace import Bot, make_ssl_context
+
+# Доверить цепочку Минцифры из PEM-файла
+bot = Bot(token="TOKEN", api_url="URL", verify_ssl="/certs/russian_trusted.pem")
+
+# ...или доверять системному хранилищу (серт установлен в ОС)
+#    pip install "vkworkspace[ssl]"
+ctx = make_ssl_context(use_truststore=True)
+bot = Bot(token="TOKEN", api_url="URL", verify_ssl=ctx)
+
+# Крайний случай (небезопасно): отключить проверку
 bot = Bot(token="TOKEN", api_url="https://internal.corp/bot/v1", verify_ssl=False)
 ```
+
+При ошибке проверки поднимается `SSLVerificationError` с готовой инструкцией.
+
+### Скачивание файлов (как в aiogram)
+
+Файлы, которые прислал пользователь, скачиваются прямо из `Message`:
+
+```python
+@router.message(F.files)
+async def on_file(message: Message):
+    data = await message.download()               # -> bytes
+    path = await message.download("/downloads/")  # -> Path (имя с сервера)
+    await message.download("/tmp/report.pdf")     # точный путь
+    paths = await message.download_all("/downloads/")  # все вложения -> list[Path]
+
+    # или c конкретного вложения / через bot
+    await message.files[0].download("/downloads/")
+    await bot.download(message.files[0])
+```
+
+Низкоуровнево — по ID или URL:
+
+```python
+data = await bot.download_file(file_id)                 # -> bytes
+path = await bot.download_file(file_id, "/downloads/")  # -> Path (имя с сервера)
+await bot.download_file_by_url(url)                      # если URL уже есть
+```
+
+> **Почему скачивание отдавало 500:** в подписанном URL `token` содержит `:`.
+> При передаче через `params=` в `httpx`/`requests` он кодируется в `%3A`, и
+> файловый хост отвечает **HTTP 500**. Эти методы дописывают токен в строку
+> URL — он уходит как есть (как в `curl`).
 
 ### Режим парсинга по умолчанию
 

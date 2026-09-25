@@ -22,6 +22,7 @@ import logging
 
 from vkworkspace.__meta__ import __version__
 from vkworkspace.client.bot import Bot
+from vkworkspace.client.ssl_utils import make_ssl_context
 from vkworkspace.dispatcher.dispatcher import Dispatcher
 from vkworkspace.dispatcher.middlewares.base import BaseMiddleware
 from vkworkspace.dispatcher.router import Router
@@ -69,4 +70,5 @@ __all__ = [
     "Scheduler",
     "__version__",
     "enable_debug",
+    "make_ssl_context",
 ]

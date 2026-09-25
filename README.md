@@ -205,13 +205,59 @@ bot = Bot(token="TOKEN", api_url="URL", retry_on_5xx=3)   # 3 retries (default)
 bot = Bot(token="TOKEN", api_url="URL", retry_on_5xx=None) # Disabled
 ```
 
-### SSL Verification
+### SSL Verification (Минцифры / private CA)
 
-On-premise installations with self-signed certificates can disable SSL verification:
+`verify_ssl` accepts a `bool`, a **PEM CA-bundle path**, or a ready
+`ssl.SSLContext`. Corporate `*.sovcombank.ru` / on-premise VK Teams servers
+are usually served behind the **Минцифры** (Russian Trusted) CA — trust it
+instead of turning verification off:
 
 ```python
+from vkworkspace import Bot, make_ssl_context
+
+# Trust the Минцифры chain from a PEM file
+bot = Bot(token="TOKEN", api_url="URL", verify_ssl="/certs/russian_trusted.pem")
+
+# ...or trust whatever the OS store trusts (cert installed system-wide)
+#    pip install "vkworkspace[ssl]"
+ctx = make_ssl_context(use_truststore=True)
+bot = Bot(token="TOKEN", api_url="URL", verify_ssl=ctx)
+
+# Last resort (insecure): disable verification
 bot = Bot(token="TOKEN", api_url="https://internal.corp/bot/v1", verify_ssl=False)
 ```
+
+A verification failure raises `SSLVerificationError` with a copy-paste remedy.
+
+### Downloading files (aiogram-style)
+
+Grab files the user sent you straight off the `Message`:
+
+```python
+@router.message(F.files)
+async def on_file(message: Message):
+    data = await message.download()               # -> bytes
+    path = await message.download("/downloads/")  # -> Path (server filename)
+    await message.download("/tmp/report.pdf")     # exact path
+    paths = await message.download_all("/downloads/")  # all attachments -> list[Path]
+
+    # or off an individual attachment / via the bot
+    await message.files[0].download("/downloads/")
+    await bot.download(message.files[0])
+```
+
+Lower-level, by ID or URL:
+
+```python
+data = await bot.download_file(file_id)                 # -> bytes
+path = await bot.download_file(file_id, "/downloads/")  # -> Path (server filename)
+await bot.download_file_by_url(url)                     # already have the URL
+```
+
+> **Why downloads used to 500:** the signed URL's `token` contains a `:`.
+> Passing it via `httpx`/`requests` `params=` percent-encodes it to `%3A` and
+> the file host answers **HTTP 500**. These methods append the token to the URL
+> string, so it is sent verbatim (like `curl`).
 
 ### Default Parse Mode
 

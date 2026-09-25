@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.10.0] - 2026-09-25
+
+### Added
+- **aiogram‑style download straight off the `Message`:** `message.download(dest=None)`, `message.download_all(dir)`, `message.files[0].download(...)`, `message.attachments`, and `Bot.download(file_or_id, dest=None)`. This is the convenient path for grabbing files a user sent. `dest=None` → `bytes`; a directory → save under the server filename and return the `Path`.
+- **`Bot.download_file(file_id, destination=None)`** and **`Bot.download_file_by_url(url, ...)`** — lower‑level file download. Resolves the URL via `files/getInfo` and streams the file from the VK Teams file host. `destination=None` returns `bytes`; a directory saves under the server filename and returns the `Path`; a file path saves there. Retries on 5xx.
+  - **Fixes the "download returns HTTP 500" bug.** The signed download URL's `token` query parameter contains a `:` (on‑prem tokens look like `001.123.456:789`). Passing it through `httpx`/`requests` `params=` percent‑encodes `:` → `%3A`, which the file host rejects with **500**. The new methods append the token to the URL *string*, so it is sent verbatim (like `curl`).
+- **Минцифры / private‑CA TLS support.** `verify_ssl` now also accepts a **PEM bundle path** (`str`/`Path`) or a ready **`ssl.SSLContext`**, in addition to `bool`. New helper `vkworkspace.make_ssl_context(cafile=..., use_truststore=..., verify=...)` builds a context that trusts the Минцифры chain (from a file or the OS store via the optional `truststore` package — `pip install "vkworkspace[ssl]"`). The certificate is **not** vendored into the package.
+- **Friendly SSL errors (in Russian).** A TLS verification failure now raises `SSLVerificationError` with a copy‑paste remedy **на русском** pointing at the Минцифры cert, instead of a bare `httpx.ConnectError` (the library's users are in RU/CIS).
+- New exceptions: `SSLVerificationError`, `FileDownloadError`. New optional extra: `vkworkspace[ssl]` (`truststore`).
+
+### Notes
+- `File.filename` stays **optional** (the server does not always send it); `download_file` derives the name from `File.filename` → the URL basename → the `file_id`, so a downloaded file always has a name.
+
 ## [1.9.0] - 2026-04-26
 
 ### Added

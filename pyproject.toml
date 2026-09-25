@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vkworkspace"
-version = "1.9.0"
+version = "1.10.0"
 description = "Fully async framework for building VK Teams (VK Workspace) bots, inspired by aiogram 3"
 readme = "README.md"
 license = { text = "MIT" }
@@ -40,6 +40,7 @@ dependencies = [
 [project.optional-dependencies]
 redis = ["redis[hiredis]>=5.0,<6.0"]
 voice = ["av>=13.0"]
+ssl = ["truststore>=0.9"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",

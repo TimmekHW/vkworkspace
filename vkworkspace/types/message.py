@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from pydantic import Field
@@ -98,11 +99,44 @@ class ForwardPayload(VKTeamsObject):
 
 
 class FilePayload(VKTeamsObject):
-    """Payload for ``parts[].type == "file"``."""
+    """Payload for ``parts[].type == "file"`` (also image / voice / sticker).
+
+    When obtained from a :class:`Message` accessor (``message.files``,
+    ``message.voice``, ``message.sticker``) it is bound to the bot, so you can
+    download it directly — aiogram‑style::
+
+        @router.message(F.files)
+        async def on_file(message: Message):
+            path = await message.files[0].download("/downloads/")
+    """
 
     file_id: str = Field(default="", alias="fileId")
     type: str = ""  # "image", "audio", "video", etc.
     caption: str | None = None
+
+    async def download(
+        self,
+        destination: str | Path | None = None,
+        *,
+        filename: str | None = None,
+        **kwargs: Any,
+    ) -> bytes | Path:
+        """Download this attachment. ``bytes`` if *destination* is ``None``.
+
+        Args:
+            destination: ``None`` → return ``bytes``; a **directory** → save
+                under the server filename and return the :class:`~pathlib.Path`;
+                a **file path** → save there.
+            filename: Override the name used when *destination* is a directory.
+
+        See :meth:`Bot.download_file` for the full contract.
+        """
+        return await self.bot.download_file(
+            self.file_id,
+            destination,
+            filename=filename,
+            **kwargs,
+        )
 
 
 class Part(VKTeamsObject):
@@ -322,10 +356,16 @@ class Message(VKTeamsObject):
         """All forwarded messages as typed objects."""
         return [f.message for p in self.parts if (f := p.as_forward) is not None]
 
+    def _bind(self, payload: FilePayload) -> FilePayload:
+        """Bind an attachment payload to this message's bot (for ``.download()``)."""
+        if self._bot is not None:
+            payload.set_bot(self._bot)
+        return payload
+
     @property
     def files(self) -> list[FilePayload]:
-        """All file attachments as typed objects."""
-        return [f for p in self.parts if (f := p.as_file) is not None]
+        """All file/image attachments as typed objects (bound → ``.download()``)."""
+        return [self._bind(f) for p in self.parts if (f := p.as_file) is not None]
 
     @property
     def caption(self) -> str | None:
@@ -406,7 +446,7 @@ class Message(VKTeamsObject):
         for part in self.parts:
             if part.type == "sticker":
                 data = part.payload if isinstance(part.payload, dict) else {}
-                return FilePayload.model_validate(data)
+                return self._bind(FilePayload.model_validate(data))
         return None
 
     @property
@@ -423,8 +463,87 @@ class Message(VKTeamsObject):
         for part in self.parts:
             if part.type == "voice":
                 data = part.payload if isinstance(part.payload, dict) else {}
-                return FilePayload.model_validate(data)
+                return self._bind(FilePayload.model_validate(data))
         return None
+
+    @property
+    def attachments(self) -> list[FilePayload]:
+        """Every downloadable attachment: files/images + voice + sticker.
+
+        Ordered as they appear; use :meth:`download` / :meth:`download_all`
+        instead if you just want the bytes.
+        """
+        items = list(self.files)
+        if (v := self.voice) is not None:
+            items.append(v)
+        if (s := self.sticker) is not None:
+            items.append(s)
+        return items
+
+    async def download(
+        self,
+        destination: str | Path | None = None,
+        *,
+        index: int = 0,
+        filename: str | None = None,
+        **kwargs: Any,
+    ) -> bytes | Path:
+        """Скачать файл, который прислал пользователь. Как в aiogram.
+
+        Удобный шорткат: берёт вложение из этого сообщения и скачивает его.
+
+        Args:
+            destination: ``None`` → вернуть ``bytes``; **папка** → сохранить
+                под именем файла с сервера и вернуть :class:`~pathlib.Path`;
+                **путь к файлу** → сохранить туда.
+            index: Какое вложение брать, если их несколько (по умолчанию первое).
+            filename: Переопределить имя при сохранении в папку.
+
+        Raises:
+            ValueError: Если в сообщении нет вложений (или нет вложения с таким
+                *index*).
+
+        Example::
+
+            @router.message(F.files)
+            async def on_file(message: Message):
+                # в память
+                data = await message.download()
+                # в папку (имя файла — как на сервере)
+                path = await message.download("/downloads/")
+        """
+        items = self.attachments
+        if not items:
+            raise ValueError("This message has no downloadable attachments.")
+        if index >= len(items):
+            raise ValueError(
+                f"Attachment index {index} out of range (message has {len(items)} attachment(s))."
+            )
+        return await items[index].download(destination, filename=filename, **kwargs)
+
+    async def download_all(
+        self,
+        destination: str | Path,
+        **kwargs: Any,
+    ) -> list[Path]:
+        """Скачать ВСЕ вложения сообщения в папку *destination*.
+
+        Возвращает список путей к сохранённым файлам (в порядке вложений).
+
+        Example::
+
+            @router.message(F.files)
+            async def on_files(message: Message):
+                paths = await message.download_all("/downloads/")
+        """
+        directory = Path(destination)
+        directory.mkdir(parents=True, exist_ok=True)
+        results: list[Path] = []
+        for item in self.attachments:
+            path = await item.download(directory, **kwargs)
+            assert isinstance(path, Path)  # directory destination always yields a Path
+            results.append(path)
+        return results
 
     async def answer(
         self,

@@ -3,17 +3,25 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import ssl
 import time
+from pathlib import Path
 from typing import Any, BinaryIO
+from urllib.parse import urlsplit
 
 import httpx
 
+from vkworkspace.client.ssl_utils import friendly_ssl_hint, normalize_verify
 from vkworkspace.enums import ParseMode
-from vkworkspace.exceptions import VKTeamsAPIError
+from vkworkspace.exceptions import (
+    FileDownloadError,
+    SSLVerificationError,
+    VKTeamsAPIError,
+)
 from vkworkspace.types.chat import ChatInfo
 from vkworkspace.types.event import Update
 from vkworkspace.types.file import File
-from vkworkspace.types.input_file import InputFile
+from vkworkspace.types.input_file import InputFile, _filename_from_url
 from vkworkspace.types.message import ParentMessage
 from vkworkspace.types.response import APIResponse
 from vkworkspace.types.thread import Thread, ThreadSubscribers
@@ -22,6 +30,20 @@ from vkworkspace.types.user import BotInfo, ChatMember, User
 logger = logging.getLogger(__name__)
 
 _UNSET: Any = object()  # sentinel: "caller didn't pass parse_mode"
+
+
+def _is_ssl_verification_error(exc: BaseException) -> bool:
+    """True if *exc* (or its cause chain) is a TLS cert‑verification failure."""
+    seen: set[int] = set()
+    cur: BaseException | None = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        if isinstance(cur, ssl.SSLCertVerificationError):
+            return True
+        if isinstance(cur, ssl.SSLError) and "CERTIFICATE_VERIFY_FAILED" in str(cur):
+            return True
+        cur = cur.__cause__ or cur.__context__
+    return False
 
 
 class RateLimiter:
@@ -107,7 +129,7 @@ class Bot:
         proxy: str | None = None,
         parse_mode: ParseMode | str | None = None,
         retry_on_5xx: int | None = 3,
-        verify_ssl: bool = True,
+        verify_ssl: bool | str | Path | ssl.SSLContext = True,
     ) -> None:
         """
         Args:
@@ -123,8 +145,18 @@ class Bot:
                 (``"HTML"`` / ``"MarkdownV2"`` / ``None``).
             retry_on_5xx: Retry count on 5xx errors. ``3`` = up to 3 retries
                 with exponential backoff. ``None`` or ``0`` = no retries.
-            verify_ssl: Verify server TLS certificate. Set ``False`` for
-                self-signed certs on on-premise servers.
+            verify_ssl: TLS trust for the server certificate. Accepts:
+
+                * ``True`` (default) — verify against the system/certifi bundle;
+                * ``False`` — **disable** verification (self‑signed / last resort);
+                * a PEM CA‑bundle **path** (``str`` / :class:`~pathlib.Path`) —
+                  trust that extra CA, e.g. the Минцифры chain;
+                * a ready :class:`ssl.SSLContext` from
+                  :func:`~vkworkspace.client.ssl_utils.make_ssl_context`.
+
+                Corporate ``*.sovcombank.ru`` / on‑premise VK Teams servers are
+                typically behind the Минцифры CA — pass the cert here instead of
+                turning verification off. See ``ssl_utils.make_ssl_context``.
         """
         self.token = token
         self.api_url = api_url.rstrip("/")
@@ -134,7 +166,10 @@ class Bot:
         self.proxy = proxy
         self.parse_mode = parse_mode
         self.retry_on_5xx = retry_on_5xx
+        # Keep the raw value for introspection; hand httpx a normalized one
+        # (SSLContext or bool) — a bare path string is deprecated in httpx 0.28.
         self.verify_ssl = verify_ssl
+        self._verify = normalize_verify(verify_ssl)
         self._rate_limiter: RateLimiter | None = RateLimiter(rate_limit) if rate_limit else None
         self._session: httpx.AsyncClient | None = None
         self._last_event_id: int = 0
@@ -148,7 +183,7 @@ class Bot:
                 ),
                 follow_redirects=True,
                 proxy=self.proxy,
-                verify=self.verify_ssl,
+                verify=self._verify,
             )
         return self._session
 
@@ -234,6 +269,11 @@ class Bot:
                         )
                     raise err
                 return data
+            except httpx.ConnectError as exc:
+                if _is_ssl_verification_error(exc):
+                    host = urlsplit(self.api_url).hostname
+                    raise SSLVerificationError(friendly_ssl_hint(host)) from exc
+                raise
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code < 500 or attempt >= max_attempts - 1:
                     raise
@@ -952,6 +992,196 @@ class Bot:
             self._params(fileId=file_id),
         )
         return File.model_validate(data)
+
+    async def download(
+        self,
+        file: Any,
+        destination: str | Path | None = None,
+        **kwargs: Any,
+    ) -> bytes | Path:
+        """aiogram‑style download. Accepts a file object **or** a file_id.
+
+        *file* may be anything carrying a ``file_id`` (a message attachment
+        :class:`~vkworkspace.types.message.FilePayload`, a
+        :class:`~vkworkspace.types.file.File`) or a raw ``file_id`` string.
+
+        Example::
+
+            await bot.download(message.files[0], "/downloads/")
+            await bot.download(file_id)
+        """
+        file_id = getattr(file, "file_id", None) or file
+        if not isinstance(file_id, str) or not file_id:
+            raise ValueError(f"Cannot resolve a file_id from {file!r}")
+        return await self.download_file(file_id, destination, **kwargs)
+
+    async def download_file(
+        self,
+        file_id: str,
+        destination: str | Path | None = None,
+        *,
+        filename: str | None = None,
+        append_token: bool = True,
+        chunk_size: int = 64 * 1024,
+    ) -> bytes | Path:
+        """Download a file by its ``file_id``. ``files/getInfo`` + GET.
+
+        Resolves the (unsigned) download URL via :meth:`get_file_info`, then
+        streams the file from the VK Teams **file host** (a different host than
+        the Bot API, e.g. ``ub.<company>.teams…``).
+
+        .. important::
+            The download URL carries its access token in the **query string**,
+            and that token contains a ``:`` (on‑prem tokens look like
+            ``001.123.456:789``). It **must** be sent verbatim — passing it
+            through ``httpx``/``requests`` ``params=`` percent‑encodes ``:`` to
+            ``%3A`` and the file host answers **HTTP 500**. This method appends
+            the token to the URL *string* itself, so it is sent as‑is. This is
+            the usual cause of "download returns 500 nine times out of ten".
+
+        Args:
+            file_id: The file's ID (from a message part or ``File.file_id``).
+            destination: Where to save. ``None`` → return the file as ``bytes``.
+                A **directory** → save as ``<dir>/<filename>`` and return the
+                :class:`~pathlib.Path`. A **file path** → save there and return it.
+            filename: Override the name used when *destination* is a directory.
+                Defaults to the server's filename, else the URL's basename.
+            append_token: Append ``?token=<bot_token>`` to the URL (default
+                ``True`` — required by most installations). Set ``False`` if the
+                URL is already signed.
+            chunk_size: Streaming chunk size in bytes (default 64 KiB).
+
+        Returns:
+            ``bytes`` if *destination* is ``None``, otherwise the saved
+            :class:`~pathlib.Path`.
+
+        Raises:
+            FileDownloadError: If the file host does not return the file.
+
+        Examples::
+
+            # Into memory
+            data = await bot.download_file(file_id)
+
+            # Into a directory (keeps the server filename)
+            path = await bot.download_file(file_id, "/downloads/")
+
+            # To an exact path
+            await bot.download_file(file_id, "/tmp/report.pdf")
+        """
+        info = await self.get_file_info(file_id)
+        if not info.url:
+            raise FileDownloadError(
+                url="",
+                message=f"files/getInfo returned no download URL for file_id={file_id!r}",
+            )
+        name = filename or info.filename or _filename_from_url(info.url) or file_id
+        return await self.download_file_by_url(
+            info.url,
+            destination,
+            filename=name,
+            append_token=append_token,
+            chunk_size=chunk_size,
+        )
+
+    async def download_file_by_url(
+        self,
+        url: str,
+        destination: str | Path | None = None,
+        *,
+        filename: str | None = None,
+        append_token: bool = True,
+        chunk_size: int = 64 * 1024,
+    ) -> bytes | Path:
+        """Download a file from an already‑known URL. GET (streamed).
+
+        Use this when you already have the URL (e.g. from a message file part)
+        and want to skip the extra ``files/getInfo`` round‑trip. See
+        :meth:`download_file` for the ``:`` / ``%3A`` token caveat — the token
+        is appended to the URL *string*, never via ``params=``.
+
+        Args mirror :meth:`download_file`. If *url* already contains a
+        ``token=`` query parameter, no token is appended regardless of
+        *append_token*.
+        """
+        target = url
+        if append_token and "token=" not in urlsplit(url).query:
+            sep = "&" if urlsplit(url).query else "?"
+            target = f"{url}{sep}token={self.token}"
+
+        name = filename or _filename_from_url(url) or "file"
+        session = await self.get_session()
+        max_attempts = (self.retry_on_5xx or 0) + 1
+        last_exc: Exception | None = None
+
+        for attempt in range(max_attempts):
+            try:
+                # NOTE: `target` is passed as a full string on purpose so httpx
+                # does not re-encode the `:` inside the token (see docstring).
+                async with session.stream("GET", target) as resp:
+                    if resp.status_code >= 500 and attempt < max_attempts - 1:
+                        last_exc = FileDownloadError(
+                            url=target,
+                            message=f"HTTP {resp.status_code} from file host",
+                        )
+                        delay = min(2**attempt, 8)
+                        logger.warning(
+                            "File download 5xx (attempt %d/%d), retrying in %ds...",
+                            attempt + 1,
+                            max_attempts,
+                            delay,
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    if resp.status_code != 200:
+                        await resp.aread()
+                        raise FileDownloadError(
+                            url=target,
+                            message=(
+                                f"HTTP {resp.status_code} from file host "
+                                f"(is the token valid / not percent‑encoded?)"
+                            ),
+                        )
+                    return await self._stream_to(resp, destination, name, chunk_size)
+            except httpx.ConnectError as exc:
+                if _is_ssl_verification_error(exc):
+                    host = urlsplit(target).hostname
+                    raise SSLVerificationError(friendly_ssl_hint(host)) from exc
+                raise
+            except httpx.HTTPError as exc:
+                if attempt >= max_attempts - 1:
+                    raise FileDownloadError(url=target, message=str(exc)) from exc
+                last_exc = exc
+                await asyncio.sleep(min(2**attempt, 8))
+
+        raise FileDownloadError(  # pragma: no cover - loop always returns/raises
+            url=target,
+            message=str(last_exc) if last_exc else "download failed",
+        )
+
+    @staticmethod
+    async def _stream_to(
+        resp: httpx.Response,
+        destination: str | Path | None,
+        filename: str,
+        chunk_size: int,
+    ) -> bytes | Path:
+        """Consume *resp* body: to ``bytes`` (destination=None) or to disk."""
+        if destination is None:
+            chunks = [chunk async for chunk in resp.aiter_bytes(chunk_size)]
+            return b"".join(chunks)
+
+        dest = Path(destination)
+        if dest.is_dir() or str(destination).endswith(("/", "\\")):
+            dest.mkdir(parents=True, exist_ok=True)
+            dest = dest / filename
+        else:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(dest, "wb") as fp:
+            async for chunk in resp.aiter_bytes(chunk_size):
+                fp.write(chunk)
+        return dest
 
     # ── Threads ───────────────────────────────────────────────────────
     #

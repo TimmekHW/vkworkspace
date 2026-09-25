@@ -1,7 +1,7 @@
 # vkworkspace — Complete LLM Reference
 
 > Async Python framework for VK Teams (VK Workspace) bots, inspired by aiogram 3.
-> Version 1.8.9 · Python 3.11+ · `pip install vkworkspace`
+> Version 1.10.0 · Python 3.11+ · `pip install vkworkspace`
 
 **Этот файл — полная справка по фреймворку vkworkspace.**
 Отдайте его целиком в ChatGPT, Claude или любую другую LLM и попросите написать бота — модель сможет использовать все возможности фреймворка без дополнительной документации.
@@ -71,7 +71,7 @@ bot = Bot(
 | `await bot.send_voice(...)` → `APIResponse` | `messages/sendVoice` | Send a voice message |
 | `await bot.answer_callback_query(...)` → `APIResponse` | `messages/answerCallbackQuery` | Answer a callback query (inline button press) |
 | `await bot.get_chat_info(...)` → `ChatInfo` | `chats/getInfo` | Get chat info |
-| `await bot.get_chat_admins(...)` → `list[ChatMember]` | `chats/getAdmins` | Get chat admins |
+| `await bot.get_chat_admins(...)` → `list[ChatMember]` | `chats/getAdmins` | Get chat admins.(read-only) |
 | `await bot.get_chat_members(...)` → `dict[str, Any]` | `chats/getMembers` | Get chat members |
 | `await bot.get_blocked_users(...)` → `list[User]` | `chats/getBlockedUsers` | Get blocked users |
 | `await bot.get_pending_users(...)` → `list[User]` | `chats/getPendingUsers` | Get pending users |
@@ -89,6 +89,9 @@ bot = Bot(
 | `await bot.pin_message(...)` → `APIResponse` | `chats/pinMessage` | Pin a message |
 | `await bot.unpin_message(...)` → `APIResponse` | `chats/unpinMessage` | Unpin a message |
 | `await bot.get_file_info(...)` → `File` | `files/getInfo` | Get file info |
+| `await bot.download(...)` → `bytes | Path` |  | aiogram‑style download. Accepts a file object **or** a file_id |
+| `await bot.download_file(...)` → `bytes | Path` | `files/getInfo` | Download a file by its.+ GET |
+| `await bot.download_file_by_url(...)` → `bytes | Path` |  | Download a file from an already‑known URL. GET (streamed) |
 | `await bot.threads_get_subscribers(...)` → `ThreadSubscribers` | `threads/subscribers/get` | Get thread subscribers |
 | `await bot.threads_autosubscribe(...)` → `APIResponse` | `threads/autosubscribe` | Toggle thread autosubscribe |
 | `await bot.threads_add(...)` → `Thread` | `threads/add` | Create thread from message |
