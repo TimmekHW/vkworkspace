@@ -1,24 +1,13 @@
-"""TLS helpers for corporate VK Teams installations.
+"""TLS helpers for VK Teams servers behind the Минцифры (Russian Trusted) CA.
 
-Russian corporate / government servers (``*.sovcombank.ru`` and friends)
-are increasingly served behind the **Минцифры** national CA
-(«Russian Trusted Root/Sub CA»). Stock ``certifi`` — the bundle ``httpx``
-uses by default — does **not** trust it, so a bot that talks to
-``https://api.<company>.myteam.mail.ru`` / ``https://<company>.teams…``
-fails with an ``SSLCertVerificationError`` until that CA is trusted.
+Stock ``certifi`` does not trust the Минцифры root, so ``https://<company>.teams…``
+fails with ``SSLCertVerificationError`` until it is trusted. Trust it via any of:
 
-We deliberately **do not** ship the Минцифры ``.pem`` inside this MIT
-package: it is a third‑party root that rotates on its own schedule, it
-bloats the wheel, and vendoring someone else's CA into a library is a bad
-idea. Instead we make it a one‑liner to trust it, from three angles:
+* a PEM file — ``verify_ssl="/certs/russian.pem"``,
+* a ready :class:`ssl.SSLContext` — ``verify_ssl=make_ssl_context(...)``,
+* the OS trust store — ``make_ssl_context(use_truststore=True)``.
 
-* point at a PEM file you already have (``verify_ssl="/certs/russian.pem"``),
-* hand over a ready :class:`ssl.SSLContext` (``verify_ssl=make_ssl_context(...)``),
-* or trust whatever the **OS store** trusts (``use_truststore=True`` — the
-  Минцифры cert installed system‑wide, which is what most corp machines and
-  base Docker images with ``ca-certificates`` already have).
-
-Where to get the certificate: https://www.gosuslugi.ru/crt
+Certificate: https://www.gosuslugi.ru/crt
 """
 
 from __future__ import annotations
@@ -26,7 +15,6 @@ from __future__ import annotations
 import ssl
 from pathlib import Path
 
-# Doc URL surfaced in the friendly error below.
 MINCIFRY_CERT_URL = "https://www.gosuslugi.ru/crt"
 
 
@@ -120,11 +108,7 @@ def normalize_verify(
 
 
 def friendly_ssl_hint(host: str | None = None) -> str:
-    """Понятное объяснение ошибки проверки сертификата (обычно — CA Минцифры).
-
-    Сообщение специально на русском: этой библиотекой пользуются в РФ / СНГ, и
-    проблема с сертификатами Минцифры касается именно российских пользователей.
-    """
+    """Текст ошибки проверки TLS-сертификата (обычно — CA Минцифры)."""
     where = f" ({host})" if host else ""
     return (
         f"Не удалось проверить TLS-сертификат сервера{where}. Скорее всего сервер "
