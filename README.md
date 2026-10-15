@@ -171,7 +171,8 @@ bot = Bot(
     proxy="http://proxy:8080",  # HTTP proxy for corporate networks
     parse_mode="HTML",          # Default parse mode for all messages (None = plain text)
     retry_on_5xx=3,             # Retry up to 3 times on 5xx errors (None = disabled)
-    verify_ssl=True,            # Set False for self-signed certs (on-premise)
+    verify_ssl=True,            # OS trust store + certifi (False = insecure, last resort)
+    mincifry=True,              # Trust the Минцифры root CA (on-premise VK Teams in Russia)
 )
 ```
 
@@ -206,26 +207,30 @@ bot = Bot(token="TOKEN", api_url="URL", retry_on_5xx=3)   # 3 retries (default)
 bot = Bot(token="TOKEN", api_url="URL", retry_on_5xx=None) # Disabled
 ```
 
-### SSL Verification (Минцифры / private CA)
+### SSL verification (Минцифры / private CA)
 
-`verify_ssl` accepts a `bool`, a **PEM CA-bundle path**, or a ready
-`ssl.SSLContext`. On-premise VK Teams servers in Russia are usually served
-behind the **Минцифры** (Russian Trusted) CA — trust it instead of turning
-verification off:
+`verify_ssl=True` (default) trusts the **OS trust store** plus the **certifi**
+bundle — unlike plain httpx, which uses certifi only and ignores certificates
+installed into Windows / Linux / Docker images.
+
+On-premise VK Teams servers in Russia are usually behind the **Минцифры**
+(Russian Trusted Root CA). Its root certificate ships with the package — turn
+it on with one switch, whichever is handier:
+
+```python
+bot = Bot(token="TOKEN", api_url="URL", mincifry=True)          # flag
+bot = Bot(token="TOKEN", api_url="URL", verify_ssl="mincifry")  # same thing
+# or without touching code:  VKT_MINCIFRY=1
+```
+
+Other cases:
 
 ```python
 from vkworkspace import Bot, make_ssl_context
 
-# Trust the Минцифры chain from a PEM file
-bot = Bot(token="TOKEN", api_url="URL", verify_ssl="/certs/russian_trusted.pem")
-
-# ...or trust whatever the OS store trusts (cert installed system-wide)
-#    pip install "vkworkspace[ssl]"
-ctx = make_ssl_context(use_truststore=True)
-bot = Bot(token="TOKEN", api_url="URL", verify_ssl=ctx)
-
-# Last resort (insecure): disable verification
-bot = Bot(token="TOKEN", api_url="https://internal.corp/bot/v1", verify_ssl=False)
+bot = Bot(..., verify_ssl="/certs/corp-ca.pem")      # private corporate CA, on top of the defaults
+bot = Bot(..., verify_ssl=make_ssl_context(use_truststore=True, mincifry=True))  # OS trust API (pip install "vkworkspace[ssl]")
+bot = Bot(..., verify_ssl=False)                      # last resort, insecure
 ```
 
 A verification failure raises `SSLVerificationError` with a copy-paste remedy.

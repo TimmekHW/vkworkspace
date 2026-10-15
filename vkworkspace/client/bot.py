@@ -12,7 +12,12 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from vkworkspace.client.ssl_utils import friendly_ssl_hint, normalize_verify
+from vkworkspace.client.ssl_utils import (
+    friendly_ssl_hint,
+    is_mincifry_alias,
+    normalize_verify,
+    resolve_mincifry,
+)
 from vkworkspace.enums import ParseMode
 from vkworkspace.exceptions import (
     FileDownloadError,
@@ -131,6 +136,7 @@ class Bot:
         parse_mode: ParseMode | str | None = None,
         retry_on_5xx: int | None = 3,
         verify_ssl: bool | str | Path | ssl.SSLContext = True,
+        mincifry: bool | None = None,
     ) -> None:
         """
         Args:
@@ -149,16 +155,19 @@ class Bot:
                 with exponential backoff. ``None`` or ``0`` = no retries.
             verify_ssl: TLS trust for the server certificate. Accepts:
 
-                * ``True`` (default) — verify against the system/certifi bundle;
-                * ``False`` — **disable** verification (self‑signed / last resort);
+                * ``True`` (default) — trust the OS store and the ``certifi``
+                  bundle (plus the Минцифры root when *mincifry* is on);
+                * ``"mincifry"`` — same as ``True`` with Минцифры trust on;
+                * ``False`` — **disable** verification (last resort);
                 * a PEM CA‑bundle **path** (``str`` / :class:`~pathlib.Path`) —
-                  trust that extra CA, e.g. the Минцифры chain;
+                  trust that extra CA **on top of** the defaults, e.g. a
+                  private corporate CA;
                 * a ready :class:`ssl.SSLContext` from
                   :func:`~vkworkspace.client.ssl_utils.make_ssl_context`.
-
-                On‑premise VK Teams servers are typically behind the Минцифры
-                CA — pass the cert here instead of turning verification off.
-                See ``ssl_utils.make_ssl_context``.
+            mincifry: Trust the vendored **Минцифры** root CA (Russian Trusted
+                Root CA) — needed for on‑premise VK Teams servers in Russia.
+                ``None`` = the ``VKT_MINCIFRY`` environment variable, else the
+                build default (:data:`~vkworkspace.client.ssl_utils.MINCIFRY_DEFAULT`).
         """
         self.token = token
         self.api_url = api_url.rstrip("/")
@@ -171,7 +180,8 @@ class Bot:
         # Keep the raw value for introspection; hand httpx a normalized one
         # (SSLContext or bool) — a bare path string is deprecated in httpx 0.28.
         self.verify_ssl = verify_ssl
-        self._verify = normalize_verify(verify_ssl)
+        self.mincifry = resolve_mincifry(mincifry) or is_mincifry_alias(verify_ssl)
+        self._verify = normalize_verify(verify_ssl, mincifry=self.mincifry)
         self._rate_limiter: RateLimiter | None = RateLimiter(rate_limit) if rate_limit else None
         self._session: httpx.AsyncClient | None = None
         self._last_event_id: int = 0
@@ -275,7 +285,9 @@ class Bot:
             except httpx.ConnectError as exc:
                 if _is_ssl_verification_error(exc):
                     host = urlsplit(self.api_url).hostname
-                    raise SSLVerificationError(friendly_ssl_hint(host)) from exc
+                    raise SSLVerificationError(
+                        friendly_ssl_hint(host, mincifry=self.mincifry)
+                    ) from exc
                 raise
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code < 500 or attempt >= max_attempts - 1:
@@ -1220,7 +1232,9 @@ class Bot:
             except httpx.ConnectError as exc:
                 if _is_ssl_verification_error(exc):
                     host = urlsplit(target).hostname
-                    raise SSLVerificationError(friendly_ssl_hint(host)) from exc
+                    raise SSLVerificationError(
+                        friendly_ssl_hint(host, mincifry=self.mincifry)
+                    ) from exc
                 raise
             except httpx.HTTPError as exc:
                 if attempt >= max_attempts - 1:

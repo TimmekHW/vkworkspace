@@ -66,3 +66,6 @@ settings.local.*
 *_private.md
 INTERNAL_*
 PRIVATE_*
+
+# Vendored PUBLIC CA (Russian Trusted Root CA) shipped with the package — not a secret
+!vkworkspace/certs/*.pem

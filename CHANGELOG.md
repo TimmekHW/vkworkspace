@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.12.0] - 2026-10-15
+
+### Added
+- **`mincifry` — one switch to trust the Минцифры root CA (Russian Trusted Root CA).** `Bot(mincifry=True)`, `verify_ssl="mincifry"`, or the `VKT_MINCIFRY=1` environment variable. The root certificate ships inside the package (`vkworkspace/certs/`) and is loaded **on top of** the defaults. Same switch on `InputFile.from_url(mincifry=...)` and `create_session(mincifry=...)`.
+- `vkworkspace.client.ssl_utils.MINCIFRY_DEFAULT` — build-time default for the switch (off in the public package).
+- `make_ssl_context()` options `system_store`, `certifi_bundle`, `mincifry`; `default_ssl_context()`, `vendored_ca_pem()`.
+
+### Changed
+- **`verify_ssl=True` now trusts the OS trust store *and* the `certifi` bundle.** Plain httpx uses certifi only, so a CA installed into Windows, Linux (`/etc/pki/ca-trust`, `ca-certificates`) or a Docker image was silently ignored — that is why servers kept failing with `CERTIFICATE_VERIFY_FAILED` after "installing the certificate". `SSL_CERT_FILE` / `SSL_CERT_DIR` are honoured. Every httpx client the library creates (`Bot`, `InputFile.from_url`, `create_session`) uses this trust.
+- `SSLVerificationError` text now says exactly how to enable Минцифры trust when it is off, and what else to check when it is on (private CA, missing Sub CA, intercepting proxy).
+
 ## [1.11.0] - 2026-10-15
 
 ### Added

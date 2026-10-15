@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import base64
+import ssl
 from io import BytesIO
 from pathlib import Path
 from typing import BinaryIO
 from urllib.parse import unquote, urlparse
 
 import httpx
+
+from vkworkspace.client.ssl_utils import normalize_verify
 
 
 class InputFile:
@@ -103,6 +106,8 @@ class InputFile:
         timeout: float = 30.0,
         proxy: str | None = None,
         max_size: int | None = None,
+        verify: bool | str | Path | ssl.SSLContext = True,
+        mincifry: bool | None = None,
     ) -> InputFile:
         """Download a file from *url* and wrap it as an InputFile.
 
@@ -116,6 +121,10 @@ class InputFile:
             proxy: HTTP proxy URL. Pass ``bot.proxy`` to reuse the bot's proxy.
             max_size: Maximum allowed file size in bytes (default 50 MB).
                 Pass ``0`` to disable the limit.
+            verify: TLS trust, same values as ``Bot(verify_ssl=...)``. Pass
+                ``bot.verify_ssl`` to reuse the bot's setting.
+            mincifry: Trust the vendored Минцифры root CA, same as
+                ``Bot(mincifry=...)``. ``None`` = library default.
 
         Raises:
             httpx.HTTPStatusError: If the download fails (4xx/5xx).
@@ -136,6 +145,7 @@ class InputFile:
             timeout=timeout,
             follow_redirects=True,
             proxy=proxy,
+            verify=normalize_verify(verify, mincifry=mincifry),
         ) as client:
             resp = await client.get(url)
             resp.raise_for_status()

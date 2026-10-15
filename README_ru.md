@@ -170,7 +170,8 @@ bot = Bot(
     proxy="http://proxy:8080",  # HTTP-прокси для корпоративных сетей
     parse_mode="HTML",          # Режим парсинга по умолчанию (None = обычный текст)
     retry_on_5xx=3,             # Ретрай до 3 раз при 5xx ошибках (None = отключено)
-    verify_ssl=True,            # False для самоподписанных сертификатов (on-premise)
+    verify_ssl=True,            # Системное хранилище + certifi (False = небезопасно, крайний случай)
+    mincifry=True,              # Доверять корню Минцифры (on-premise VK Teams в РФ)
 )
 ```
 
@@ -207,23 +208,28 @@ bot = Bot(token="TOKEN", api_url="URL", retry_on_5xx=None)  # Отключено
 
 ### SSL-верификация (Минцифры / приватный CA)
 
-`verify_ssl` принимает `bool`, **путь к PEM-бандлу CA** или готовый
-`ssl.SSLContext`. On-premise серверы VK Teams обычно стоят за CA **Минцифры** —
-доверьте его, а не отключайте проверку:
+`verify_ssl=True` (по умолчанию) доверяет **системному хранилищу** плюс бандлу
+**certifi** — в отличие от голого httpx, который берёт только certifi и не видит
+сертификаты, установленные в Windows / Linux / Docker-образ.
+
+On-premise серверы VK Teams в РФ обычно стоят за CA **Минцифры** (Russian
+Trusted Root CA). Его корневой сертификат идёт в комплекте с пакетом —
+включается одним переключателем, как удобнее:
+
+```python
+bot = Bot(token="TOKEN", api_url="URL", mincifry=True)          # флаг
+bot = Bot(token="TOKEN", api_url="URL", verify_ssl="mincifry")  # то же самое
+# или без правки кода:  VKT_MINCIFRY=1
+```
+
+Остальные случаи:
 
 ```python
 from vkworkspace import Bot, make_ssl_context
 
-# Доверить цепочку Минцифры из PEM-файла
-bot = Bot(token="TOKEN", api_url="URL", verify_ssl="/certs/russian_trusted.pem")
-
-# ...или доверять системному хранилищу (серт установлен в ОС)
-#    pip install "vkworkspace[ssl]"
-ctx = make_ssl_context(use_truststore=True)
-bot = Bot(token="TOKEN", api_url="URL", verify_ssl=ctx)
-
-# Крайний случай (небезопасно): отключить проверку
-bot = Bot(token="TOKEN", api_url="https://internal.corp/bot/v1", verify_ssl=False)
+bot = Bot(..., verify_ssl="/certs/corp-ca.pem")      # приватный корпоративный CA, поверх дефолтов
+bot = Bot(..., verify_ssl=make_ssl_context(use_truststore=True, mincifry=True))  # через OS trust API (pip install "vkworkspace[ssl]")
+bot = Bot(..., verify_ssl=False)                      # крайний случай, небезопасно
 ```
 
 При ошибке проверки поднимается `SSLVerificationError` с готовой инструкцией.
