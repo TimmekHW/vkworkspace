@@ -24,7 +24,7 @@ from .message import (
 )
 from .response import APIResponse
 from .thread import Subscriber, Thread, ThreadSubscribers
-from .user import BotInfo, ChatMember, Contact, Photo, User
+from .user import BotInfo, ChatMember, Contact, Photo, User, UserInfo
 
 __all__ = [
     "APIResponse",
@@ -56,5 +56,6 @@ __all__ = [
     "ThreadSubscribers",
     "Update",
     "User",
+    "UserInfo",
     "VKTeamsObject",
 ]

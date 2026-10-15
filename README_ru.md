@@ -185,7 +185,8 @@ bot = Bot(token="TOKEN", api_url="URL", rate_limit=10)
 
 ### Прокси
 
-В корпоративных сетях часто нужен прокси. Параметр `proxy` применяется только к API-запросам:
+В корпоративных сетях часто нужен прокси. Параметр `proxy` применяется только к API-запросам.
+Если он не задан, берётся переменная окружения **`VKT_PROXY`** (например, `VKT_PROXY=http://proxy:9090`):
 
 ```python
 bot = Bot(
@@ -207,8 +208,8 @@ bot = Bot(token="TOKEN", api_url="URL", retry_on_5xx=None)  # Отключено
 ### SSL-верификация (Минцифры / приватный CA)
 
 `verify_ssl` принимает `bool`, **путь к PEM-бандлу CA** или готовый
-`ssl.SSLContext`. Корпоративные `*.sovcombank.ru` / on-premise серверы VK Teams
-обычно стоят за CA **Минцифры** — доверьте его, а не отключайте проверку:
+`ssl.SSLContext`. On-premise серверы VK Teams обычно стоят за CA **Минцифры** —
+доверьте его, а не отключайте проверку:
 
 ```python
 from vkworkspace import Bot, make_ssl_context
@@ -226,6 +227,34 @@ bot = Bot(token="TOKEN", api_url="https://internal.corp/bot/v1", verify_ssl=Fals
 ```
 
 При ошибке проверки поднимается `SSLVerificationError` с готовой инструкцией.
+
+### Пользователи и упоминания
+
+`user_id` → ФИО → упоминание, и обратно:
+
+```python
+# user_id -> ФИО / упоминание
+user = await bot.get_user("ivanov@company.ru")
+user.full_name                                   # "Иван Иванов"
+user.mention                                     # "@[ivanov@company.ru]"
+await bot.get_user_name("ivanov@company.ru")     # "Иван Иванов"
+
+# ник -> user_id (у ботов — числовой ID из URL аватарки)
+info = await bot.get_user("alert_bot")
+info.user_id, info.is_bot
+
+# упоминание -> user_id (входящее сообщение)
+@router.message(F.mentions)
+async def on_mention(message: Message):
+    message.mentioned_user_ids                   # ["petrov@company.ru"]
+    who = message.mentions[0]
+    who.user_id, who.full_name, who.mention
+    await message.answer(f"{message.from_user.mention}, принял")
+```
+
+`full_name` / `mention` / `mention_md` есть у любого объекта-пользователя
+(`message.from_user`, `message.mentions[i]`, участники чата, `bot.get_me()`).
+Результаты `get_user` кэшируются на время жизни бота — `cache=False`, чтобы обойти, `bot.clear_user_cache()`, чтобы сбросить.
 
 ### Скачивание файлов (как в aiogram)
 

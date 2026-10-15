@@ -7,7 +7,7 @@ from pydantic import Field
 
 from .base import VKTeamsObject
 from .chat import Chat
-from .user import Contact
+from .user import Contact, _NamedUser
 
 if TYPE_CHECKING:
     from vkworkspace.enums import ChatAction, ParseMode
@@ -63,8 +63,20 @@ class ParentMessage(VKTeamsObject):
 # ── Message parts (mention, reply, forward, file, …) ─────────────
 
 
-class MentionPayload(VKTeamsObject):
-    """Payload for ``parts[].type == "mention"``."""
+class MentionPayload(_NamedUser, VKTeamsObject):
+    """Payload for ``parts[].type == "mention"``.
+
+    Properties: ``full_name``, ``mention``, ``mention_md``.
+
+    Example::
+
+        @router.message(F.mentions)
+        async def on_mention(message: Message):
+            who = message.mentions[0]
+            who.user_id    # "ivanov@company.ru"
+            who.full_name  # "Иван Иванов"
+            await message.answer(f"{who.mention}, тебя звали")
+    """
 
     user_id: str = Field(default="", alias="userId")
     first_name: str | None = Field(default=None, alias="firstName")
@@ -340,8 +352,21 @@ class Message(VKTeamsObject):
 
     @property
     def mentions(self) -> list[MentionPayload]:
-        """All mention parts as typed objects."""
+        """All mention parts as typed objects (``.user_id``, ``.full_name``, ``.mention``)."""
         return [m for p in self.parts if (m := p.as_mention) is not None]
+
+    @property
+    def mentioned_user_ids(self) -> list[str]:
+        """IDs of everyone @mentioned in this message.
+
+        Example::
+
+            @router.message(F.mentions)
+            async def on_mention(message: Message):
+                for user_id in message.mentioned_user_ids:
+                    ...
+        """
+        return [m.user_id for m in self.mentions if m.user_id]
 
     @property
     def reply_to(self) -> ReplyMessagePayload | None:

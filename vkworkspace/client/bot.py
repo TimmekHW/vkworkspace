@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import ssl
 import time
 from pathlib import Path
@@ -25,7 +26,7 @@ from vkworkspace.types.input_file import InputFile, _filename_from_url
 from vkworkspace.types.message import ParentMessage
 from vkworkspace.types.response import APIResponse
 from vkworkspace.types.thread import Thread, ThreadSubscribers
-from vkworkspace.types.user import BotInfo, ChatMember, User
+from vkworkspace.types.user import BotInfo, ChatMember, User, UserInfo
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +141,8 @@ class Bot:
             poll_time: Long-poll timeout in seconds (default 60).
             rate_limit: Max requests per second. ``None`` = unlimited.
             proxy: HTTP proxy URL (e.g. ``"http://proxy:8535"``).
-                Only affects Bot API requests.
+                Only affects Bot API requests. If omitted, the ``VKT_PROXY``
+                environment variable is used when set.
             parse_mode: Default parse mode for all messages
                 (``"HTML"`` / ``"MarkdownV2"`` / ``None``).
             retry_on_5xx: Retry count on 5xx errors. ``3`` = up to 3 retries
@@ -154,16 +156,16 @@ class Bot:
                 * a ready :class:`ssl.SSLContext` from
                   :func:`~vkworkspace.client.ssl_utils.make_ssl_context`.
 
-                Corporate ``*.sovcombank.ru`` / on‑premise VK Teams servers are
-                typically behind the Минцифры CA — pass the cert here instead of
-                turning verification off. See ``ssl_utils.make_ssl_context``.
+                On‑premise VK Teams servers are typically behind the Минцифры
+                CA — pass the cert here instead of turning verification off.
+                See ``ssl_utils.make_ssl_context``.
         """
         self.token = token
         self.api_url = api_url.rstrip("/")
         self.timeout = timeout
         self.poll_time = poll_time
         self.rate_limit = rate_limit
-        self.proxy = proxy
+        self.proxy = proxy if proxy is not None else (os.environ.get("VKT_PROXY") or None)
         self.parse_mode = parse_mode
         self.retry_on_5xx = retry_on_5xx
         # Keep the raw value for introspection; hand httpx a normalized one
@@ -173,6 +175,7 @@ class Bot:
         self._rate_limiter: RateLimiter | None = RateLimiter(rate_limit) if rate_limit else None
         self._session: httpx.AsyncClient | None = None
         self._last_event_id: int = 0
+        self._user_cache: dict[str, UserInfo] = {}
 
     async def get_session(self) -> httpx.AsyncClient:
         if self._session is None or self._session.is_closed:
@@ -713,6 +716,77 @@ class Bot:
         )
         return ChatInfo.model_validate(data)
 
+    # ── Users ─────────────────────────────────────────────────────────
+
+    async def get_user(self, user: str, *, cache: bool = True) -> UserInfo:
+        """Resolve a user by ``user_id`` (email) or ``nick``. ``chats/getInfo``
+
+        Gives you the person's name for a ``user_id`` — and the other way
+        round, a ``user_id`` / ``mention`` for a nick.
+
+        Args:
+            user: ``"ivanov@company.ru"`` (user_id) or ``"ivanov"`` (nick).
+            cache: Remember the result for the bot's lifetime (default). Pass
+                ``False`` to always hit the API; :meth:`clear_user_cache`
+                drops everything remembered.
+
+        Returns:
+            :class:`~vkworkspace.types.user.UserInfo` with ``full_name``,
+            ``mention``, ``first_name``, ``last_name``, ``nick``, ``is_bot``,
+            ``uin``. ``user_id`` is the email when you passed one; for a nick
+            lookup it is the numeric ``uin`` from the avatar URL (the ID VK
+            Teams uses for bots), or the nick itself if no avatar.
+
+        Raises:
+            ValueError: If *user* is a group / channel, not a person.
+            VKTeamsAPIError: If the API rejects the lookup.
+
+        Example::
+
+            user = await bot.get_user("ivanov@company.ru")
+            await bot.send_text(chat_id, f"{user.mention}, {user.full_name} на связи")
+
+            bot_info = await bot.get_user("the_equalizer_alert_bot")  # by nick
+            bot_info.user_id, bot_info.is_bot
+        """
+        key = user.strip()
+        if cache and key in self._user_cache:
+            return self._user_cache[key]
+
+        info = await self.get_chat_info(key)
+        if info.type in ("group", "channel"):
+            raise ValueError(f"{key!r} is a {info.type}, not a user")
+
+        uin = UserInfo.parse_uin(info.photos)
+        user_id = key if "@" in key else (uin or key)
+        result = UserInfo(
+            userId=user_id,
+            firstName=info.first_name,
+            lastName=info.last_name,
+            nick=info.nick,
+            about=info.about,
+            isBot=info.is_bot,
+            uin=uin,
+            photos=info.photos,
+        )
+        if cache:
+            self._user_cache[key] = result
+            self._user_cache[user_id] = result
+        return result
+
+    async def get_user_name(self, user: str, *, cache: bool = True) -> str:
+        """``full_name`` of a user by ``user_id`` or nick. Shortcut for :meth:`get_user`.
+
+        Example::
+
+            name = await bot.get_user_name("ivanov@company.ru")   # "Иван Иванов"
+        """
+        return (await self.get_user(user, cache=cache)).full_name
+
+    def clear_user_cache(self) -> None:
+        """Forget everything :meth:`get_user` has cached."""
+        self._user_cache.clear()
+
     async def get_chat_admins(self, chat_id: str) -> list[ChatMember]:
         """Get chat admins. ``chats/getAdmins`` (read-only).
 
@@ -906,8 +980,8 @@ class Bot:
 
            - Cloud ``myteam.mail.ru``: enable via MetaBot, or by request
              to Mail.ru support if MetaBot's toggle is insufficient.
-           - On-premises: open a ticket with your integrators (in
-             Sovcombank — the «Доступы → VK Teams» Pyrus form).
+           - On-premises: open a ticket with your integrators / platform
+             administrators to enable the method for this bot.
 
         :param name: Chat title (required).
         :param about: Description.

@@ -62,9 +62,9 @@ def test_bot_accepts_ssl_context():
 
 
 def test_friendly_hint_mentions_mincifry():
-    hint = friendly_ssl_hint("api.teams.sovcombank.ru")
+    hint = friendly_ssl_hint("api.vkteams.example")
     assert "Минцифры" in hint
-    assert "sovcombank.ru" in hint
+    assert "api.vkteams.example" in hint
 
 
 def test_is_ssl_verification_error_detects_cause():

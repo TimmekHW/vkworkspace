@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.11.0] - 2026-10-15
+
+### Added
+- **User resolving: `user_id` ⇄ name ⇄ mention.**
+  - `bot.get_user(user_id_or_nick)` → `UserInfo` (`full_name`, `mention`, `first_name`, `last_name`, `nick`, `is_bot`, `uin`) via `chats/getInfo`. Results are cached for the bot's lifetime (`cache=False` to bypass, `bot.clear_user_cache()` to reset).
+  - `bot.get_user_name(user_id_or_nick)` → `"Имя Фамилия"`.
+  - Nick lookup yields `user_id` = numeric `uin` parsed from the avatar URL (`targetSn=…`, the ID VK Teams uses for bots).
+- **`full_name` / `mention` / `mention_md` properties** on every user-like object: `User`, `Contact` (`message.from_user`), `ChatMember`, `BotInfo`, `ChatInfo`, `MentionPayload`. `mention` renders `@[user_id]`, `mention_md` the MarkdownV2-escaped form.
+- **`message.mentioned_user_ids`** — IDs of everyone @mentioned in a message (mention → `user_id`).
+- **`VKT_PROXY` environment variable** — used as the Bot API proxy when `Bot(proxy=...)` is not given.
+
+### Fixed
+- `ChatInfo.photos` now reads the API's actual `photo` key (the old `photos` spelling is still accepted). Before this fix the avatar list was always empty on real responses.
+
 ## [1.10.0] - 2026-09-25
 
 ### Added

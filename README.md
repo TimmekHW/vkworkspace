@@ -186,7 +186,8 @@ bot = Bot(token="TOKEN", api_url="URL", rate_limit=10)
 
 ### Proxy
 
-Corporate networks often require a proxy. The `proxy` parameter applies only to API calls:
+Corporate networks often require a proxy. The `proxy` parameter applies only to API calls.
+If it is omitted, the **`VKT_PROXY`** environment variable is used (e.g. `VKT_PROXY=http://proxy:9090`):
 
 ```python
 bot = Bot(
@@ -208,9 +209,9 @@ bot = Bot(token="TOKEN", api_url="URL", retry_on_5xx=None) # Disabled
 ### SSL Verification (Минцифры / private CA)
 
 `verify_ssl` accepts a `bool`, a **PEM CA-bundle path**, or a ready
-`ssl.SSLContext`. Corporate `*.sovcombank.ru` / on-premise VK Teams servers
-are usually served behind the **Минцифры** (Russian Trusted) CA — trust it
-instead of turning verification off:
+`ssl.SSLContext`. On-premise VK Teams servers in Russia are usually served
+behind the **Минцифры** (Russian Trusted) CA — trust it instead of turning
+verification off:
 
 ```python
 from vkworkspace import Bot, make_ssl_context
@@ -228,6 +229,34 @@ bot = Bot(token="TOKEN", api_url="https://internal.corp/bot/v1", verify_ssl=Fals
 ```
 
 A verification failure raises `SSLVerificationError` with a copy-paste remedy.
+
+### Users & mentions
+
+`user_id` → name → mention, and back:
+
+```python
+# user_id -> name / mention
+user = await bot.get_user("ivanov@company.ru")
+user.full_name                                   # "Иван Иванов"
+user.mention                                     # "@[ivanov@company.ru]"
+await bot.get_user_name("ivanov@company.ru")     # "Иван Иванов"
+
+# nick -> user_id (for bots: numeric ID from the avatar URL)
+info = await bot.get_user("alert_bot")
+info.user_id, info.is_bot
+
+# mention -> user_id (incoming message)
+@router.message(F.mentions)
+async def on_mention(message: Message):
+    message.mentioned_user_ids                   # ["petrov@company.ru"]
+    who = message.mentions[0]
+    who.user_id, who.full_name, who.mention
+    await message.answer(f"{message.from_user.mention}, принял")
+```
+
+`full_name` / `mention` / `mention_md` are available on every user-like object
+(`message.from_user`, `message.mentions[i]`, chat members, `bot.get_me()`).
+`get_user` results are cached per bot — `cache=False` to bypass, `bot.clear_user_cache()` to reset.
 
 ### Downloading files (aiogram-style)
 

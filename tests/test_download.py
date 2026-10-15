@@ -20,10 +20,8 @@ pytestmark = pytest.mark.asyncio
 
 # On‑prem bot token — note the ``:`` that must survive to the wire.
 TOKEN = "001.3033835949.2221539346:1000001942"
-API_URL = "https://api.teams.sovcombank.test/bot/v1"
-FILE_URL = (
-    "https://ub.teams.sovcombank.test/files/get/fvbxHASH_-x/api-ms-win-core-handle-l1-1-0.dll"
-)
+API_URL = "https://api.teams.vkteams.test/bot/v1"
+FILE_URL = "https://ub.teams.vkteams.test/files/get/fvbxHASH_-x/api-ms-win-core-handle-l1-1-0.dll"
 PAYLOAD = b"MZ\x90\x00\x03binary-dll-bytes"
 
 

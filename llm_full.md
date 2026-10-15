@@ -1,7 +1,7 @@
 # vkworkspace — Complete LLM Reference
 
 > Async Python framework for VK Teams (VK Workspace) bots, inspired by aiogram 3.
-> Version 1.10.0 · Python 3.11+ · `pip install vkworkspace`
+> Version 1.11.0 · Python 3.11+ · `pip install vkworkspace`
 
 **Этот файл — полная справка по фреймворку vkworkspace.**
 Отдайте его целиком в ChatGPT, Claude или любую другую LLM и попросите написать бота — модель сможет использовать все возможности фреймворка без дополнительной документации.
@@ -71,6 +71,8 @@ bot = Bot(
 | `await bot.send_voice(...)` → `APIResponse` | `messages/sendVoice` | Send a voice message |
 | `await bot.answer_callback_query(...)` → `APIResponse` | `messages/answerCallbackQuery` | Answer a callback query (inline button press) |
 | `await bot.get_chat_info(...)` → `ChatInfo` | `chats/getInfo` | Get chat info |
+| `await bot.get_user(...)` → `UserInfo` | `chats/getInfo` | Resolve a user by(email) or |
+| `await bot.get_user_name(...)` → `str` |  | of a user byor nick. Shortcut for :meth:`get_user` |
 | `await bot.get_chat_admins(...)` → `list[ChatMember]` | `chats/getAdmins` | Get chat admins.(read-only) |
 | `await bot.get_chat_members(...)` → `dict[str, Any]` | `chats/getMembers` | Get chat members |
 | `await bot.get_blocked_users(...)` → `list[User]` | `chats/getBlockedUsers` | Get blocked users |
@@ -1126,7 +1128,7 @@ from vkworkspace.enums import (
 | `FormatSpan` | `vkworkspace.types.message` | offset, length, url |
 | `ParentMessage` | `vkworkspace.types.message` | chat_id, message_id, type |
 
-Other exported types: `BotInfo`, `Button`, `ChangedChatInfoEvent`, `ChatMember`, `File`, `FilePayload`, `ForwardPayload`, `LeftChatMembersEvent`, `MentionPayload`, `MessageFormat`, `NewChatMembersEvent`, `Photo`, `ReplyMessagePayload`, `ReplyPayload`, `Subscriber`, `Thread`, `ThreadSubscribers`, `Update`, `User`
+Other exported types: `BotInfo`, `Button`, `ChangedChatInfoEvent`, `ChatMember`, `File`, `FilePayload`, `ForwardPayload`, `LeftChatMembersEvent`, `MentionPayload`, `MessageFormat`, `NewChatMembersEvent`, `Photo`, `ReplyMessagePayload`, `ReplyPayload`, `Subscriber`, `Thread`, `ThreadSubscribers`, `Update`, `User`, `UserInfo`
 
 ---
 
