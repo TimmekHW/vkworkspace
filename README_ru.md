@@ -100,6 +100,7 @@ Framework overhead — **НОЛЬ** в реальных условиях. Сет
 - **FSM** — конечный автомат состояний с бэкендами Memory и Redis
 - **Middleware** — пайплайн inner/outer для логирования, авторизации, троттлинга
 - **Форматирование текста** — хелперы `md`, `html` для MarkdownV2/HTML + `FormatBuilder` для offset/length + `split_text` для длинных сообщений
+- **Markdown от LLM** — `from_markdown()` переводит GFM в то, что рисует ваша версия сервера VK Teams (диалекты по файлу на версию), и режет длинные ответы, не ломая разметку
 - **Конструктор клавиатур** — fluent API для inline-клавиатур со стилями кнопок
 - **Rate limiter** — встроенный ограничитель запросов (`rate_limit=5` = макс. 5 запросов/сек)
 - **Ретрай при 5xx** — автоматический ретрай с экспоненциальным backoff при серверных ошибках
@@ -123,6 +124,12 @@ pip install vkworkspace
 
 ```bash
 pip install vkworkspace[redis]
+```
+
+С конвертацией Markdown (`from_markdown`, для ответов LLM):
+
+```bash
+pip install "vkworkspace[markdown]"
 ```
 
 ## Быстрый старт
@@ -593,11 +600,83 @@ await message.answer(**content.as_kwargs())
 await message.answer(**content.as_kwargs("MarkdownV2"))
 ```
 
-Доступные ноды: `Text`, `Bold`, `Italic`, `Underline`, `Strikethrough`, `Code`, `Pre`, `Link`, `Mention`, `Quote`, `Raw`
+Доступные ноды: `Text`, `Bold`, `Italic`, `Underline`, `Strikethrough`, `Code`, `Pre`, `Link`, `Mention`, `Quote`, `OrderedList`, `UnorderedList`, `Raw`
+
+У каждой ноды есть `as_plain()` (без разметки, для `parse_mode=None`) и `split()` (см. ниже).
 
 > **Внимание:** Не смешивайте строковые хелперы (`md.*` / `html.*`) с нодами — строки внутри нод автоэкранируются, поэтому `Text(md.bold("x"))` выдаст литеральный `*x*`, а не жирный. Используйте `Bold("x")`.
 
 > **Моноширинный:** бэктик, набранный внутри обычной строки, — **литеральный текст**: билдер его экранирует, и `` Text("use `x` here") `` покажет бэктики как символы. Моноширинный — это нода: `Text("use ", Code("x"), " here")`; многострочный — `Pre("...", language="python")`. Спецсимволы внутри `Code` / `Pre` экранируются сами — VK Teams требует экранирования и внутри кода.
+
+### Markdown → VK Teams (ответы LLM)
+
+LLM отвечают в Markdown: `**жирный**`, `` `код` ``, блоки кода, списки, таблицы. `from_markdown()` превращает это в дерево нод, которое рендерится в то, что принимает **ваш** сервер VK Teams: стиль, который сервер не рисует, уходит обычным текстом, а не «Format error»:
+
+```python
+from vkworkspace.formatting import from_markdown   # pip install "vkworkspace[markdown]"
+from vkworkspace.exceptions import VKTeamsAPIError
+
+doc = from_markdown(llm_answer)
+
+# длинные ответы: режется между блоками и строками, никогда внутри разметки
+for part in doc.split("MarkdownV2"):
+    try:
+        await message.answer(**part.as_kwargs("MarkdownV2"))
+    except VKTeamsAPIError:
+        await message.answer(part.as_plain(), parse_mode=None)
+```
+
+| Markdown | Уходит как |
+|---|---|
+| `**жирный**`, `# Заголовок` | жирный |
+| `` `код` ``, ```` ```python ```` | инлайн-код / блок кода, все спецсимволы внутри экранированы |
+| `@[user_id]` | упоминание |
+| `> цитата` | цитата |
+| `*курсив*`, `~~зачёркнутый~~`, `[текст](url)`, списки | разметка, если диалект говорит, что сервер её рисует, иначе `курсив`, `~зачёркнутый~`, `текст (url)`, `• пункт` / `1. пункт` |
+| таблица | моноширинный блок с выровненными колонками |
+| блок кода внутри цитаты или списка | каждая строка инлайн-кодом (блок там — «Format error») |
+| сырой HTML | текст |
+
+LLM пишет сразу HTML (`<b>`, `<i>`, `<br>`, иногда `` `код` `` в бэктиках)? `from_html()` строит из него то же дерево — только стандартная библиотека, ставить ничего не нужно:
+
+```python
+from vkworkspace.formatting import from_html
+
+doc = from_html(llm_html)   # <br> → перенос, `x` → код, <pre> в цитате → строки кода
+await message.answer(**doc.as_kwargs("HTML"))
+```
+
+Теги, которые есть в VK Teams, становятся нодами; `<p>` / `<div>` / заголовки начинают строку; таблица — моноширинный блок; неизвестные теги оставляют свой текст; одиночный `<` остаётся текстом. `split()`, `as_plain()` и диалекты работают так же.
+
+**Диалекты — по файлу на версию сервера.** Что рисует сервер VK Teams, зависит от релиза, поэтому правила лежат в TOML-файлах: какие стили работают в MarkdownV2 и HTML, экранирование, шаблоны разметки, текстовые замены.
+
+| Диалект | |
+|---|---|
+| `vkteams-25.4` | по умолчанию для `from_markdown`. VK WorkSpace On-Premise 25.4, все стили проверены живьём на сервере 25.4.3p в MarkdownV2 и HTML. `)` в адресе ссылки MarkdownV2 экранируется; списки идут разметкой, когда каждый пункт в одну строку и нумерация с 1. Инлайн-код обёрнут в жирный — клиенты рисуют его почти как обычный текст |
+| `vkteams-docs` | по умолчанию для нод, собранных руками. Всё, что описано в документации Bot API, — разметкой |
+
+```python
+from_markdown(text, dialect="vkteams-docs")             # верить документации
+from_markdown(text, dialect="/etc/bot/vkteams-26.3.toml")
+doc.as_markdown(dialect="vkteams-docs")                 # переопределить при рендере
+Italic("x").as_markdown(dialect="vkteams-25.4")         # "x"
+# на всё приложение: VKT_DIALECT=vkteams-docs (имя или путь)
+```
+
+Какой релиз у вашего сервера? Веб-хост отдаёт конфиг клиента без логина: `https://<веб-хост>/myteam-config.json` (хост веб-клиента и ссылок на профили). `api-version` и сборки клиентов, которые он раздаёт (`apps.win_x64.full_version`, например `25.4.3.78298`), дают релиз сервера — «О программе» в десктоп-клиенте показывает только версию самого клиента.
+
+Новый сервер — маленький файл, который наследует известный диалект и перечисляет, что изменилось:
+
+```toml
+# vkteams-26.3.toml
+extends = "vkteams-25.4"
+
+[support]
+italic = { markdownv2 = "yes", html = "yes" }
+link   = { html = "yes" }
+```
+
+Полный формат — матрица поддержки, пары `[exclusive]`, экранирование, шаблоны, замены, `[highlight]`, `max_length` — описан в [`vkteams-docs.toml`](https://github.com/TimmekHW/vkworkspace/blob/main/vkworkspace/formatting/dialects/vkteams-docs.toml).
 
 ### Format Builder (offset/length)
 
@@ -953,6 +1032,7 @@ vkworkspace/
 ├── dispatcher/      # Dispatcher, Router, EventObserver, Middleware pipeline
 ├── filters/         # Command, StateFilter, CallbackData, ChatType, Regexp
 ├── fsm/             # StatesGroup, State, FSMContext, Memory/Redis хранилища
+├── formatting/      # from_markdown, диалекты по версиям сервера (dialects/*.toml)
 └── utils/           # InlineKeyboardBuilder, магический фильтр (F), форматирование текста (md, html, split_text)
 ```
 

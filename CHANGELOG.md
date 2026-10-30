@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **`vkworkspace.formatting.from_markdown()` — Markdown (CommonMark + GFM tables / `~~strike~~`) → a text node tree**, for LLM answers. Bold, headings (→ bold), inline code, fenced and indented code blocks, links, images (→ links), lists, quotes, tables (→ a monospace block with aligned columns), horizontal rules and `@[user_id]` mentions. A link that shows its own URL (`<https://…>`, `[url](url)`) goes as plain text — the clients linkify URLs. Raw HTML in the input stays text. Blank lines between blocks follow the source. Needs the new extra: `pip install "vkworkspace[markdown]"` (`markdown-it-py`).
+- **Formatting dialects — the rules of one VK Teams server version in a TOML file:** which styles render in MarkdownV2 / HTML (`yes` / `no` / `untested`), mutually exclusive style pairs, escaping (text, code, URLs), the allowed code-block languages, markup templates, plain-text fallbacks, a style to wrap inline code in (`[highlight]`) and `max_length`. A dialect file can `extends` another one and list only what changed. Built-in:
+  - `vkteams-25.4` — VK WorkSpace On-Premise 25.4 (`myteam-config.json`: `api-version` 133, clients 25.4.3.78298). Every style checked live in MarkdownV2 and HTML on a 25.4.3p server, seen the same in the 25.4.3 and 26.1 clients: an unescaped `)` ends a MarkdownV2 link URL (escaped now), `&amp;` in an HTML `href` shows `&` in the text (raw `&` is sent). List markup only for one-line items numbered from 1, otherwise `• item` / `1. item` text. Code-block languages `[A-Za-z0-9+]+` (`c++` included), others dropped. Inline code is wrapped in bold (`[highlight] inline_code = "bold"`): the clients draw it almost like body text. Default for `from_markdown`.
+  - `vkteams-docs` — everything the Bot API docs describe, as markup. Default for hand-built nodes.
+  - `get_dialect(name_or_path)`, `available_dialects()`, `Dialect`, `DialectError`; `VKT_DIALECT` (a name or a `.toml` path) sets the dialect for the whole process.
+- Text builder: every render method takes `dialect=` (`as_markdown`, `as_html`, `as_kwargs`); `Text(..., dialect=...)` binds a subtree (the outermost binding wins, a render-time `dialect=` beats all). A style the dialect does not render becomes its plain-text fallback: `text (url)`, `• item`, `│ quote`, `~strike~`.
+- **`vkworkspace.formatting.from_html()` — HTML (the way bots and LLMs write it for VK Teams) → the same node tree.** Supported tags become nodes (`<strong>`/`<em>`/`<ins>`/`<del>` aliases included), `<br>` a line break, `<p>` / `<div>` / headings (→ bold) start a line, tables a monospace block, unknown tags keep their text; GFM code typed into the text (`` `x` ``, ```` ```block``` ````) becomes code and `@[user_id]` a mention, outside `<code>` / `<pre>`. Entities are decoded; a `<` that does not open a known tag stays text (the stdlib parser would drop `a<b` silently). Unclosed tags are closed, stray closing tags dropped. Standard library only.
+- `node.as_plain()` — plain text without markup or escaping, for `parse_mode=None` (the retry after a «Format error»).
+- `node.split(parse_mode, max_length=None)` — parts that each render within the limit, cut between blocks and lines, never inside markup: a long code block becomes several blocks, a long list several lists (numbering continues), a long bold run several bold runs. Length in UTF-16 code units of the rendered text; the default limit comes from the dialect (4096).
+- `OrderedList(*items, start=1)` / `UnorderedList(*items)` nodes.
+
+### Changed
+- `Pre` inside `Quote`, a list or an inline style (the docs list `pre` as exclusive with every other style; `<pre>` inside `<blockquote>` is a «Format error» on a live server) now renders each line as inline code instead of a block. Lists inside a quote render as text lines. Other default output of the text builder is unchanged.
+- A style nested in itself (a heading containing `**bold**` → `Bold` inside `Bold`, bold inside bold, a quote inside a quote) no longer emits the wrapper twice: `<b><b>…</b></b>` is a «Format error» on a live server. The inner node renders its content without re-applying the style (verified live on 25.4.3p / cloud).
+- `Mention` nested in `Code` / `Pre` contributes `@[user_id]` (was an empty string).
+
 ## [1.12.1] - 2026-10-30
 
 ### Fixed

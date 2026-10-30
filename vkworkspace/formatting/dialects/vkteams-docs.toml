@@ -1,0 +1,109 @@
+# VK Teams formatting as the Bot API docs describe it
+# (teams.vk.com/botapi/tutorial/#Text_Format), taken at face value.
+#
+#   [support]     which styles the server renders, per parse mode:
+#                 "yes" → markup; "no" / "untested" → the [fallback] text
+#   [exclusive]   pairs of styles that cannot be nested in each other; the
+#                 inner one is rendered with its fallback
+#   [markdownv2], [html]
+#                 escaping (characters escaped in text, inside code, in URLs),
+#                 the code-block language pattern, and markup templates
+#   [fallback]    plain-text stand-ins, used in every mode and by as_plain()
+#   [highlight]   inline_code = "bold" / "italic" / "underline" wraps every
+#                 inline code span in that style (not inside the same style)
+#   [limits]      max_length — the default for split()
+#
+# A dialect for another server version starts with
+#     extends = "<older dialect>"
+# and lists only what changed; tables are merged key by key.
+#
+# Template fields: {text} — the rendered content; {line} — the template is
+# repeated for every line of the content; {url} {id} {language} {n} {items}.
+# Literal text of a [fallback] template is escaped; of a markup template — not.
+
+name = "vkteams-docs"
+description = "VK Teams Bot API formatting as documented; nothing live-checked"
+
+[support]
+bold           = { markdownv2 = "yes", html = "yes" }
+italic         = { markdownv2 = "yes", html = "yes" }
+underline      = { markdownv2 = "yes", html = "yes" }
+strikethrough  = { markdownv2 = "yes", html = "yes" }
+inline_code    = { markdownv2 = "yes", html = "yes" }
+pre            = { markdownv2 = "yes", html = "yes" }
+link           = { markdownv2 = "yes", html = "yes" }
+mention        = { markdownv2 = "yes", html = "yes" }
+quote          = { markdownv2 = "yes", html = "yes" }
+ordered_list   = { markdownv2 = "yes", html = "yes" }
+unordered_list = { markdownv2 = "yes", html = "yes" }
+
+# The docs: pre excludes every other style, inline_code ↔ pre, link ↔ mention,
+# lists ↔ quote. Nested lists are not described.
+[exclusive]
+pre            = ["bold", "italic", "underline", "strikethrough", "inline_code", "link",
+                  "mention", "quote", "ordered_list", "unordered_list"]
+link           = ["mention"]
+quote          = ["ordered_list", "unordered_list"]
+ordered_list   = ["ordered_list", "unordered_list"]
+unordered_list = ["unordered_list"]
+
+[markdownv2]
+escape           = '_*[]()~`>#+-=|{}.!\'
+code_escape      = '_*[]()~`>#+-=|{}.!\'
+url_escape       = ''
+language_pattern = ''          # regex for ```language; '' — any
+list_separator   = "\n"
+
+[markdownv2.markup]
+bold           = "*{text}*"
+italic         = "_{text}_"
+underline      = "__{text}__"
+strikethrough  = "~{text}~"
+inline_code    = "`{text}`"
+pre            = "```\n{text}\n```"
+pre_language   = "```{language}\n{text}\n```"
+link           = "[{text}]({url})"
+mention        = '@\[{id}\]'
+quote          = ">{line}"
+ordered_list   = "{items}"
+unordered_list = "{items}"
+ordered_item   = "{n}. {text}"
+unordered_item = "- {text}"
+
+[html]
+escape           = "&<>"
+code_escape      = "&<>"
+url_escape       = ""
+language_pattern = ""
+list_separator   = ""
+
+[html.markup]
+bold           = "<b>{text}</b>"
+italic         = "<i>{text}</i>"
+underline      = "<u>{text}</u>"
+strikethrough  = "<s>{text}</s>"
+inline_code    = "<code>{text}</code>"
+pre            = "<pre>{text}</pre>"
+pre_language   = '<pre><code class="{language}">{text}</code></pre>'
+link           = '<a href="{url}">{text}</a>'
+mention        = "@[{id}]"
+quote          = "<blockquote>{text}</blockquote>"
+ordered_list   = "<ol>{items}</ol>"
+unordered_list = "<ul>{items}</ul>"
+ordered_item   = "<li>{text}</li>"
+unordered_item = "<li>{text}</li>"
+
+[fallback]
+bold           = "{text}"
+italic         = "{text}"
+underline      = "{text}"
+strikethrough  = "~{text}~"
+inline_code    = "{text}"
+link           = "{text} ({url})"
+mention        = "@[{id}]"
+quote          = "│ {line}"
+ordered_item   = "{n}. {text}"
+unordered_item = "• {text}"
+
+[limits]
+max_length = 4096

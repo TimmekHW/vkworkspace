@@ -41,14 +41,16 @@ dependencies = [
 redis = ["redis[hiredis]>=5.0,<6.0"]
 voice = ["av>=13.0"]
 ssl = ["truststore>=0.9"]
+markdown = ["markdown-it-py>=3.0"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
     "pytest-cov>=5.0",
     "ruff>=0.5",
     "pyright>=1.1",
+    "markdown-it-py>=3.0",
 ]
-all = ["vkworkspace[redis,voice,dev]"]
+all = ["vkworkspace[redis,voice,markdown,dev]"]
 
 [project.urls]
 Homepage = "https://github.com/TimmekHW/vkworkspace"

@@ -1,0 +1,38 @@
+# VK WorkSpace On-Premise 25.4 messenger (VK Teams).
+#
+# Seen on a 25.4.3p server: /myteam-config.json reports api-version 133 and
+# hands out 25.4.3.78298 desktop clients. The 25.4 messenger guide («Как
+# работать в Мессенджере. Версия 25.4», p. 27) lists bold, italic, underline,
+# monospace, link, bulleted and numbered lists, quote, code block and
+# strikethrough. Every style below was sent by a bot and looked at in the
+# 25.4.3.78298 client on 2026-10-30 (labels of the check script in comments);
+# the docs' [exclusive] rules hold (<pre> inside <blockquote> is a «Format error»).
+
+name = "vkteams-25.4"
+extends = "vkteams-docs"
+description = "VK WorkSpace On-Premise 25.4 (25.4.3p, api-version 133); live-checked 2026-10-30"
+
+[support]
+bold           = { markdownv2 = "yes", html = "yes" }   # also around `code`, inside a word (D16 D17 E12)
+italic         = { markdownv2 = "yes", html = "yes" }   # D1, inside bold D12, E1
+underline      = { markdownv2 = "yes", html = "yes" }   # D2 E2
+strikethrough  = { markdownv2 = "yes", html = "yes" }   # D3 E3
+inline_code    = { markdownv2 = "yes", html = "yes" }   # every special escaped inside
+pre            = { markdownv2 = "yes", html = "yes" }   # ```python, ```c++, <pre><code class> (D15 E10)
+link           = { markdownv2 = "yes", html = "yes" }   # D4–D8, E4 E5
+mention        = { markdownv2 = "yes", html = "yes" }   # @\[id\] / @[id], inside bold (D14 E11)
+quote          = { markdownv2 = "yes", html = "yes" }   # D9; <b> and <code> inside (E9)
+ordered_list   = { markdownv2 = "yes", html = "yes" }   # D10 E7
+unordered_list = { markdownv2 = "yes", html = "yes" }   # D11 E8
+
+# The clients draw `inline code` in nearly the body font and cannot copy it on click.
+[highlight]
+inline_code = "bold"
+
+[markdownv2]
+url_escape = ')\'                    # an unescaped ")" ends the URL (D5); "\)" works (D6)
+language_pattern = '[A-Za-z0-9+]+'
+
+[html]
+url_escape = ''                      # "&amp;" in href leaks "&" into the text (E6); raw "&" works (E5)
+language_pattern = '[A-Za-z0-9+]+'

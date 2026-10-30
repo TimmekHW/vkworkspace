@@ -1053,6 +1053,29 @@ for chunk in chunks:
     await bot.send_text(chat_id, chunk)
 ```
 
+### Markdown from LLMs (`pip install "vkworkspace[markdown]"`)
+
+```python
+from vkworkspace.formatting import from_markdown
+
+doc = from_markdown(llm_answer)          # GFM -> node tree, dialect "vkteams-25.4"
+for part in doc.split("MarkdownV2"):     # cut between blocks/lines, never inside markup
+    await message.answer(**part.as_kwargs("MarkdownV2"))
+
+doc.as_plain()                           # no markup, for parse_mode=None
+from_markdown(text, dialect="vkteams-docs")   # every documented style as markup
+# VKT_DIALECT=<name or .toml path> sets the dialect for the whole process
+
+from vkworkspace.formatting import from_html  # LLM wrote HTML (stdlib only)
+doc = from_html(llm_html)                # <br> -> newline, `x` -> code, <p>/<h3> -> lines
+await message.answer(**doc.as_kwargs("HTML"))
+```
+
+Dialects (`vkworkspace/formatting/dialects/*.toml`) describe one VK Teams server
+version: which styles render in MarkdownV2/HTML (`yes`/`no`/`untested`), escaping,
+templates, plain-text fallbacks. Unsupported styles become text (`text (url)`,
+`• item`, `│ quote`), never a «Format error». A file can `extends` another dialect.
+
 ### FormatBuilder (offset/length)
 
 ```python
@@ -1576,6 +1599,7 @@ from vkworkspace.utils.keyboard import InlineKeyboardBuilder
 from vkworkspace.utils.paginator import Paginator, PaginationCB
 from vkworkspace.utils.actions import typing_action, ChatActionSender
 from vkworkspace.utils.text import html, md, Text, Bold, Italic, Code, Link, split_text
+from vkworkspace.formatting import from_html, from_markdown
 from vkworkspace.utils.format_builder import FormatBuilder
 from vkworkspace.utils.sync import run_sync, sync_to_async
 from vkworkspace.utils.scheduler import Scheduler

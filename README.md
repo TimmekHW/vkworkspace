@@ -100,6 +100,7 @@ VK Teams bots spend 99% of their time waiting for the network. Synchronous frame
 - **FSM** — Finite State Machine with Memory and Redis storage backends
 - **Middleware** — inner/outer middleware pipeline for logging, auth, throttling
 - **Text formatting** — `md`, `html` helpers for MarkdownV2/HTML + `FormatBuilder` for offset/length + `split_text` for long messages
+- **Markdown from LLMs** — `from_markdown()` converts GFM to what your VK Teams server version renders (per-version dialect files), splits long answers without breaking markup
 - **Keyboard builder** — fluent API for inline keyboards with button styles
 - **Rate limiter** — built-in request throttling (`rate_limit=5` = max 5 req/sec)
 - **Retry on 5xx** — automatic retry with exponential backoff on server errors
@@ -123,6 +124,12 @@ With Redis FSM storage:
 
 ```bash
 pip install vkworkspace[redis]
+```
+
+With Markdown conversion (`from_markdown`, for LLM answers):
+
+```bash
+pip install "vkworkspace[markdown]"
 ```
 
 ## Quick Start
@@ -611,11 +618,83 @@ await message.answer(**content.as_kwargs())
 await message.answer(**content.as_kwargs("MarkdownV2"))
 ```
 
-Available nodes: `Text`, `Bold`, `Italic`, `Underline`, `Strikethrough`, `Code`, `Pre`, `Link`, `Mention`, `Quote`, `Raw`
+Available nodes: `Text`, `Bold`, `Italic`, `Underline`, `Strikethrough`, `Code`, `Pre`, `Link`, `Mention`, `Quote`, `OrderedList`, `UnorderedList`, `Raw`
+
+Every node also has `as_plain()` (no markup, for `parse_mode=None`) and `split()` (see below).
 
 > **Warning:** Do not mix string helpers (`md.*` / `html.*`) with node builder — raw strings inside nodes get auto-escaped, so `Text(md.bold("x"))` produces literal `*x*`, not bold. Use `Bold("x")` instead.
 
 > **Monospace:** a backtick typed inside a plain string is **literal text** — the builder escapes it, so `` Text("use `x` here") `` shows the backticks as characters. Monospace is the node: `Text("use ", Code("x"), " here")`; multi-line — `Pre("...", language="python")`. Special characters inside `Code` / `Pre` are escaped for you — VK Teams requires escaping inside code too.
+
+### Markdown → VK Teams (LLM answers)
+
+LLMs answer in Markdown: `**bold**`, `` `code` ``, fenced blocks, lists, tables. `from_markdown()` turns it into a node tree that renders to what **your** VK Teams server accepts — a style the server does not render becomes plain text, not a «Format error»:
+
+```python
+from vkworkspace.formatting import from_markdown   # pip install "vkworkspace[markdown]"
+from vkworkspace.exceptions import VKTeamsAPIError
+
+doc = from_markdown(llm_answer)
+
+# long answers: split between blocks and lines, never inside markup
+for part in doc.split("MarkdownV2"):
+    try:
+        await message.answer(**part.as_kwargs("MarkdownV2"))
+    except VKTeamsAPIError:
+        await message.answer(part.as_plain(), parse_mode=None)
+```
+
+| Markdown | Sent as |
+|---|---|
+| `**bold**`, `# Heading` | bold |
+| `` `code` ``, ```` ```python ```` | inline code / code block, every special character inside escaped |
+| `@[user_id]` | mention |
+| `> quote` | quote |
+| `*italic*`, `~~strike~~`, `[text](url)`, lists | markup where the dialect says the server renders it, otherwise `italic`, `~strike~`, `text (url)`, `• item` / `1. item` |
+| table | monospace block with aligned columns |
+| code block inside a quote or a list | each line as inline code (a block there is a «Format error») |
+| raw HTML | text |
+
+The LLM writes HTML instead (`<b>`, `<i>`, `<br>`, sometimes `` `code` `` in backticks)? `from_html()` builds the same tree from it — standard library only, nothing to install:
+
+```python
+from vkworkspace.formatting import from_html
+
+doc = from_html(llm_html)   # <br> → line break, `x` → code, <pre> in a quote → code lines
+await message.answer(**doc.as_kwargs("HTML"))
+```
+
+Tags VK Teams has become their nodes, `<p>` / `<div>` / headings start a line, a table becomes a monospace block, unknown tags keep their text, a stray `<` stays text. `split()`, `as_plain()` and dialects work the same.
+
+**Dialects — one file per server version.** What a VK Teams server renders differs between releases, so the rules live in TOML files: which styles work in MarkdownV2 and HTML, the escaping, the markup templates, the plain-text fallbacks.
+
+| Dialect | |
+|---|---|
+| `vkteams-25.4` | default for `from_markdown`. VK WorkSpace On-Premise 25.4, every style checked live on a 25.4.3p server in MarkdownV2 and HTML. `)` in a MarkdownV2 link URL is escaped; lists become list markup when every item is one line and numbering starts at 1. Inline code is wrapped in bold — the clients draw it almost like plain text |
+| `vkteams-docs` | default for hand-built nodes. Everything the Bot API docs describe, as markup |
+
+```python
+from_markdown(text, dialect="vkteams-docs")             # trust the docs
+from_markdown(text, dialect="/etc/bot/vkteams-26.3.toml")
+doc.as_markdown(dialect="vkteams-docs")                 # override at render time
+Italic("x").as_markdown(dialect="vkteams-25.4")         # "x"
+# for the whole app: VKT_DIALECT=vkteams-docs (a name or a path)
+```
+
+Which release is your server? The web host serves the client config without login: `https://<web host>/myteam-config.json` (the host of your web client / profile links). `api-version` and the client builds it hands out (`apps.win_x64.full_version`, e.g. `25.4.3.78298`) give the server release — the desktop client's «About» shows only the client's own version.
+
+A newer server is a small file that extends a known one and lists what changed:
+
+```toml
+# vkteams-26.3.toml
+extends = "vkteams-25.4"
+
+[support]
+italic = { markdownv2 = "yes", html = "yes" }
+link   = { html = "yes" }
+```
+
+The full format — support matrix, `[exclusive]` style pairs, escaping, templates, fallbacks, `[highlight]`, `max_length` — is documented in [`vkteams-docs.toml`](https://github.com/TimmekHW/vkworkspace/blob/main/vkworkspace/formatting/dialects/vkteams-docs.toml).
 
 ### Format Builder (offset/length)
 
@@ -963,6 +1042,7 @@ vkworkspace/
 ├── dispatcher/      # Dispatcher, Router, EventObserver, Middleware pipeline
 ├── filters/         # Command, StateFilter, CallbackData, ChatType, Regexp
 ├── fsm/             # StatesGroup, State, FSMContext, Memory/Redis storage
+├── formatting/      # from_markdown, per-server-version dialects (dialects/*.toml)
 └── utils/           # InlineKeyboardBuilder, magic filter (F), text formatting (md, html, split_text)
 ```
 
