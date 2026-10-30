@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.13.0] - 2026-10-31
 
 ### Added
 - **`vkworkspace.formatting.from_markdown()` — Markdown (CommonMark + GFM tables / `~~strike~~`) → a text node tree**, for LLM answers. Bold, headings (→ bold), inline code, fenced and indented code blocks, links, images (→ links), lists, quotes, tables (→ a monospace block with aligned columns), horizontal rules and `@[user_id]` mentions. A link that shows its own URL (`<https://…>`, `[url](url)`) goes as plain text — the clients linkify URLs. Raw HTML in the input stays text. Blank lines between blocks follow the source. Needs the new extra: `pip install "vkworkspace[markdown]"` (`markdown-it-py`).
