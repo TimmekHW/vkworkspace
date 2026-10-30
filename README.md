@@ -615,6 +615,8 @@ Available nodes: `Text`, `Bold`, `Italic`, `Underline`, `Strikethrough`, `Code`,
 
 > **Warning:** Do not mix string helpers (`md.*` / `html.*`) with node builder — raw strings inside nodes get auto-escaped, so `Text(md.bold("x"))` produces literal `*x*`, not bold. Use `Bold("x")` instead.
 
+> **Monospace:** a backtick typed inside a plain string is **literal text** — the builder escapes it, so `` Text("use `x` here") `` shows the backticks as characters. Monospace is the node: `Text("use ", Code("x"), " here")`; multi-line — `Pre("...", language="python")`. Special characters inside `Code` / `Pre` are escaped for you — VK Teams requires escaping inside code too.
+
 ### Format Builder (offset/length)
 
 VK Teams also supports formatting via the `format` parameter — a JSON dict with offset/length ranges instead of markup. `FormatBuilder` makes it easy:

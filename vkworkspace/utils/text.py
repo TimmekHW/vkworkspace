@@ -45,12 +45,17 @@ class _Markdown:
 
         md.escape("price: 100$")     # "price: 100\\$"
         md.bold("important")         # "*important*"
-        md.code("x = 1")            # "`x = 1`"
+        md.code("x = 1")            # "`x \\= 1`"
     """
 
     @staticmethod
     def escape(text: str) -> str:
-        """Escape special MarkdownV2 characters."""
+        """Escape special MarkdownV2 characters.
+
+        VK Teams requires this inside inline code and code blocks too: an
+        unescaped ``_`` or ``-`` inside code is a «Format error», and a lone
+        ``\\`` is consumed as an escape character.
+        """
         return _MD_SPECIAL.sub(r"\\\1", text)
 
     @staticmethod
@@ -71,13 +76,16 @@ class _Markdown:
 
     @staticmethod
     def code(text: str) -> str:
-        return f"`{text}`"
+        """Inline code. *text* is raw — special characters are escaped here."""
+        return f"`{_Markdown.escape(text)}`"
 
     @staticmethod
     def pre(text: str, language: str = "") -> str:
+        """Code block. *text* is raw — special characters are escaped here."""
+        body = _Markdown.escape(text)
         if language:
-            return f"```{language}\n{text}\n```"
-        return f"```\n{text}\n```"
+            return f"```{language}\n{body}\n```"
+        return f"```\n{body}\n```"
 
     @staticmethod
     def link(text: str, url: str) -> str:
@@ -184,13 +192,22 @@ class _Node:
         content = Text("Hello, ", Bold("World"), "!")
         await message.answer(**content.as_kwargs())
 
-    Nodes auto-escape plain strings.  Use :class:`Raw` for pre-formatted content.
+    Nodes auto-escape plain strings — a backtick or ``*`` typed inside a string
+    is literal text, not markup. Monospace is :class:`Code` / :class:`Pre`.
+    Use :class:`Raw` for pre-formatted content.
+
+    ``str(node)`` and f-strings render **HTML**; use :meth:`as_markdown` or
+    :meth:`as_kwargs` for MarkdownV2.
     """
 
     def __init__(self, *parts: str | _Node) -> None:
         self._parts: tuple[str | _Node, ...] = parts
 
     # ── internal rendering ─────────────────────────────────
+
+    def _plain(self) -> str:
+        """Text content of the subtree with all formatting dropped."""
+        return "".join(p._plain() if isinstance(p, _Node) else str(p) for p in self._parts)
 
     def _render_children(self, mode: str) -> str:
         """Render children: escape strings, delegate nodes."""
@@ -318,13 +335,15 @@ class Code(_Node):
     """Inline code — content is literal (not recursively formatted).
 
     ``Code("x < 1")`` → ``<code>x &lt; 1</code>`` (HTML) / ```x < 1``` (MD).
+    Special characters inside are escaped for MarkdownV2; nested nodes
+    contribute their plain text (code cannot contain other styles).
     """
 
     def _to_str(self, mode: str) -> str:
-        inner = "".join(str(p) for p in self._parts)
+        inner = self._plain()
         if mode == "html":
-            return f"<code>{_escape_for_mode(inner, 'html')}</code>"
-        return f"`{inner}`"
+            return f"<code>{_HTML.escape(inner)}</code>"
+        return f"`{_Markdown.escape(inner)}`"
 
 
 class Pre(_Node):
@@ -340,13 +359,13 @@ class Pre(_Node):
         self._language = language
 
     def _to_str(self, mode: str) -> str:
-        inner = "".join(str(p) for p in self._parts)
+        inner = self._plain()
         if mode == "html":
-            escaped = _escape_for_mode(inner, "html")
+            escaped = _HTML.escape(inner)
             if self._language:
                 return f'<pre><code class="{self._language}">{escaped}</code></pre>'
             return f"<pre>{escaped}</pre>"
-        return f"```{self._language}\n{inner}\n```"
+        return f"```{self._language}\n{_Markdown.escape(inner)}\n```"
 
 
 class Link(_Node):

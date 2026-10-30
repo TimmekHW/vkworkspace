@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.12.1] - 2026-10-30
+
+### Fixed
+- **MarkdownV2 inline code / pre:** `Code(...)`, `Pre(...)`, `md.code()` and `md.pre()` now escape special characters inside the content. VK Teams applies its rule «every special character that is not a style marker must be backslash-escaped» inside code too: before this fix `` Code("get_user()") `` or `` Code("a-b") `` was rejected with «Format error», a backtick in the content terminated the span, and a lone backslash was consumed (`` Code("C:\logs") `` showed `C:logs`).
+- `Code(...)` / `Pre(...)` with nested nodes rendered the nested node as **HTML inside MarkdownV2** (`` `<b>x</b>` ``). Nested nodes now contribute plain text (code cannot contain other styles).
+
+### Docs
+- Text builder: a backtick typed inside a plain string is **literal text** (it is escaped) — monospace is the `Code(...)` / `Pre(...)` node. `str(node)` / f-strings render HTML; use `as_markdown()` / `as_kwargs("MarkdownV2")` for MD.
+- Tests for the text builder's MarkdownV2 / HTML rendering (`tests/test_text_builder.py`) — there were none.
+
 ## [1.12.0] - 2026-10-15
 
 ### Added

@@ -1,7 +1,7 @@
 # vkworkspace — Complete LLM Reference
 
 > Async Python framework for VK Teams (VK Workspace) bots, inspired by aiogram 3.
-> Version 1.12.0 · Python 3.11+ · `pip install vkworkspace`
+> Version 1.12.1 · Python 3.11+ · `pip install vkworkspace`
 
 **Этот файл — полная справка по фреймворку vkworkspace.**
 Отдайте его целиком в ChatGPT, Claude или любую другую LLM и попросите написать бота — модель сможет использовать все возможности фреймворка без дополнительной документации.
