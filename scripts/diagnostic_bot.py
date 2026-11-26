@@ -28,7 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2 as httpx
 
 # ── Path setup ─────────────────────────────────────────────────────────────
 # Allow running from examples/ without installing the package

@@ -79,6 +79,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import inspect
 import json
 import logging
 import signal
@@ -254,7 +255,7 @@ class RedisListener:
 
     async def _emit_startup(self) -> None:
         for cb in self._on_startup:
-            if asyncio.iscoroutinefunction(cb):
+            if inspect.iscoroutinefunction(cb):
                 await cb()
             else:
                 cb()
@@ -263,7 +264,7 @@ class RedisListener:
 
     async def _emit_shutdown(self) -> None:
         for cb in self._on_shutdown:
-            if asyncio.iscoroutinefunction(cb):
+            if inspect.iscoroutinefunction(cb):
                 await cb()
             else:
                 cb()

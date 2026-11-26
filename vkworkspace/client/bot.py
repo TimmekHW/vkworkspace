@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import functools
 import json
 import logging
 import os
+import random
+import re
 import ssl
 import time
+from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator
 from pathlib import Path
 from typing import Any, BinaryIO
 from urllib.parse import urlsplit
 
-import httpx
+import httpx2
+from pydantic import ValidationError
 
 from vkworkspace.client.ssl_utils import (
     friendly_ssl_hint,
@@ -23,6 +29,8 @@ from vkworkspace.exceptions import (
     FileDownloadError,
     SSLVerificationError,
     VKTeamsAPIError,
+    VKTeamsHTTPError,
+    VKTeamsNetworkError,
 )
 from vkworkspace.types.chat import ChatInfo
 from vkworkspace.types.event import Update
@@ -36,6 +44,126 @@ from vkworkspace.types.user import BotInfo, ChatMember, User, UserInfo
 logger = logging.getLogger(__name__)
 
 _UNSET: Any = object()  # sentinel: "caller didn't pass parse_mode"
+
+_CONNECT_TIMEOUT = 10.0
+_POOL_TIMEOUT = 10.0
+_MAX_CONNECTIONS = 100
+_POLL_MAX_CONNECTIONS = 4
+_DEADLINE_SLACK = 5.0
+
+# The request never left the client: repeating it cannot duplicate anything.
+_NOT_SENT_ERRORS = (
+    httpx2.ConnectError,
+    httpx2.ConnectTimeout,
+    httpx2.PoolTimeout,
+    httpx2.ProxyError,
+)
+# The request may have reached the server: the outcome is unknown.
+_OUTCOME_UNKNOWN_ERRORS = (
+    httpx2.ReadTimeout,
+    httpx2.WriteTimeout,
+    httpx2.ReadError,
+    httpx2.WriteError,
+    httpx2.RemoteProtocolError,
+)
+# Methods that create something new on every call. They are not repeated when
+# the outcome of the previous attempt is unknown.
+_NON_REPEATABLE = frozenset(
+    {
+        "messages/sendText",
+        "messages/sendTextWithDeeplink",
+        "messages/sendFile",
+        "messages/sendVoice",
+        "chats/createChat",
+        "threads/add",
+    }
+)
+
+
+class _ClientState:
+    """Bookkeeping for an ``httpx2.AsyncClient`` created by :class:`Bot`."""
+
+    __slots__ = ("connect_failures", "in_flight", "limit", "retired")
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        self.in_flight = 0
+        self.connect_failures = 0
+        self.retired = False
+
+
+def _files_repeatable(files: dict[str, Any]) -> bool:
+    """True if every file object can be read again for a repeated upload."""
+    for value in files.values():
+        fp = value[1] if isinstance(value, tuple) else value
+        if isinstance(fp, (bytes, str)):
+            continue
+        try:
+            if not fp.seekable():
+                return False
+        except (AttributeError, ValueError):
+            return False
+    return True
+
+
+#: ``await make_request(endpoint, params, files)`` → the decoded JSON answer.
+MakeRequest = Callable[
+    [str, dict[str, Any] | None, dict[str, Any] | None], Awaitable[dict[str, Any]]
+]
+#: ``async def middleware(make_request, endpoint, params, files)``.
+RequestMiddleware = Callable[
+    [MakeRequest, str, dict[str, Any] | None, dict[str, Any] | None],
+    Awaitable[dict[str, Any]],
+]
+
+_MARKDOWN_ESCAPE = re.compile(r"\\(.)", re.DOTALL)
+
+
+def _is_format_error(exc: VKTeamsAPIError) -> bool:
+    return exc.message.startswith("Format error")
+
+
+def _format_repairs(params: dict[str, Any]) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Variants of a message rejected with «Format error», most faithful first."""
+    field = "text" if "text" in params else "caption" if "caption" in params else None
+    if field is None or not isinstance(params[field], str):
+        return
+    text: str = params[field]
+    mode = str(params.get("parseMode") or "").lower()
+    plain = text
+    if mode == "html":
+        from vkworkspace.formatting import from_html
+
+        try:
+            tree = from_html(text)
+            repaired, plain = tree.as_html(), tree.as_plain()
+        except Exception:  # the fallback must not replace the server's error with its own
+            logger.debug("from_html failed on a rejected message", exc_info=True)
+            return
+        if repaired and repaired != text:
+            yield "with repaired HTML", {**params, field: repaired}
+    elif mode == "markdownv2":
+        plain = _MARKDOWN_ESCAPE.sub(r"\1", text)
+    if not plain:
+        return
+    without = {k: v for k, v in params.items() if k not in ("parseMode", "format")}
+    without[field] = plain
+    if without != params:
+        yield "as plain text", without
+
+
+def _jittered(delay: float) -> float:
+    """*delay* shortened by a random part of up to a half.
+
+    Many bots that lost the same server do not come back in the same instant.
+    """
+    return delay * random.uniform(0.5, 1.0)  # noqa: S311
+
+
+def _describe(exc: BaseException) -> str:
+    """``TypeName: message`` — httpx2 timeouts often carry an empty message."""
+    text = str(exc)
+    return f"{type(exc).__name__}: {text}" if text else type(exc).__name__
 
 
 def _is_ssl_verification_error(exc: BaseException) -> bool:
@@ -98,7 +226,7 @@ class Bot:
     """
     VK Teams Bot API client.
 
-    All methods are async and use httpx.AsyncClient under the hood.
+    All methods are async and use httpx2.AsyncClient under the hood.
     Supports ``async with`` for automatic session cleanup.
 
     Usage::
@@ -116,7 +244,7 @@ class Bot:
         bot = Bot(token="TOKEN", api_url="https://myteam.mail.ru/bot/v1",
                   proxy="http://proxy-server:8535")
         # Only Bot API requests go through the proxy.
-        # Your other httpx clients (e.g. requests to 83.166.254.26:8000) are NOT affected.
+        # Your other HTTP clients (e.g. requests to 83.166.254.26:8000) are NOT affected.
 
     Context manager (recommended for FastAPI / background tasks)::
 
@@ -137,13 +265,16 @@ class Bot:
         retry_on_5xx: int | None = 3,
         verify_ssl: bool | str | Path | ssl.SSLContext = True,
         mincifry: bool | None = None,
+        format_fallback: bool = True,
     ) -> None:
         """
         Args:
             token: Bot token from BotFather.
             api_url: Base API URL (e.g. ``"https://myteam.mail.ru/bot/v1"``
                 for on-premise VK Teams).
-            timeout: HTTP request timeout in seconds (default 30).
+            timeout: Seconds to wait for the server's answer (default 30).
+                Any call without a file is abandoned ``timeout + 25`` seconds
+                after it started (a long-poll: ``poll_time + timeout + 25``).
             poll_time: Long-poll timeout in seconds (default 60).
             rate_limit: Max requests per second. ``None`` = unlimited.
             proxy: HTTP proxy URL (e.g. ``"http://proxy:8535"``).
@@ -151,12 +282,20 @@ class Bot:
                 environment variable is used when set.
             parse_mode: Default parse mode for all messages
                 (``"HTML"`` / ``"MarkdownV2"`` / ``None``).
-            retry_on_5xx: Retry count on 5xx errors. ``3`` = up to 3 retries
-                with exponential backoff. ``None`` or ``0`` = no retries.
+            retry_on_5xx: Retry count on 5xx and network errors. ``3`` = up
+                to 3 retries with exponential backoff. ``None`` or ``0`` = no
+                retries. A request that was not sent (connection, proxy and
+                pool errors) is always repeated; one with an unknown outcome
+                (read timeout, dropped connection) is repeated for every
+                method except those that create something new on each call
+                (``sendText``, ``sendFile``, ``sendVoice``, ``createChat``,
+                ``threads/add``).
             verify_ssl: TLS trust for the server certificate. Accepts:
 
-                * ``True`` (default) — trust the OS store and the ``certifi``
-                  bundle (plus the Минцифры root when *mincifry* is on);
+                * ``True`` (default) — trust what the machine trusts: the
+                  Windows store, the system bundle of a Linux image, a bundle
+                  mounted into a pod — the certificates are searched for
+                  (plus the vendored Минцифры root when *mincifry* is on);
                 * ``"mincifry"`` — same as ``True`` with Минцифры trust on;
                 * ``False`` — **disable** verification (last resort);
                 * a PEM CA‑bundle **path** (``str`` / :class:`~pathlib.Path`) —
@@ -164,10 +303,17 @@ class Bot:
                   private corporate CA;
                 * a ready :class:`ssl.SSLContext` from
                   :func:`~vkworkspace.client.ssl_utils.make_ssl_context`.
-            mincifry: Trust the vendored **Минцифры** root CA (Russian Trusted
-                Root CA) — needed for on‑premise VK Teams servers in Russia.
+            mincifry: Trust the **Минцифры** root CA shipped with the package
+                (Russian Trusted Root CA) — for machines that do not have it
+                installed.
                 ``None`` = the ``VKT_MINCIFRY`` environment variable, else the
                 build default (:data:`~vkworkspace.client.ssl_utils.MINCIFRY_DEFAULT`).
+            format_fallback: When the server rejects a message with
+                «Format error», resend it: HTML is rebuilt by
+                :func:`vkworkspace.formatting.from_html` (unclosed tags, stray
+                ``<`` and ``&``, nesting the server does not render), and if
+                that is rejected too, the text goes without markup. A warning
+                is logged. ``False`` = raise :class:`VKTeamsAPIError` at once.
         """
         self.token = token
         self.api_url = api_url.rstrip("/")
@@ -177,30 +323,133 @@ class Bot:
         self.proxy = proxy if proxy is not None else (os.environ.get("VKT_PROXY") or None)
         self.parse_mode = parse_mode
         self.retry_on_5xx = retry_on_5xx
-        # Keep the raw value for introspection; hand httpx a normalized one
-        # (SSLContext or bool) — a bare path string is deprecated in httpx 0.28.
+        # Keep the raw value for introspection; hand httpx2 a normalized one
+        # (SSLContext or bool) — a bare path string is deprecated in httpx2.
         self.verify_ssl = verify_ssl
         self.mincifry = resolve_mincifry(mincifry) or is_mincifry_alias(verify_ssl)
         self._verify = normalize_verify(verify_ssl, mincifry=self.mincifry)
+        self.format_fallback = format_fallback
+        self.request_middlewares: list[RequestMiddleware] = []
         self._rate_limiter: RateLimiter | None = RateLimiter(rate_limit) if rate_limit else None
-        self._session: httpx.AsyncClient | None = None
+        self._session: httpx2.AsyncClient | None = None
+        self._poll_session: httpx2.AsyncClient | None = None
+        self._clients: dict[httpx2.AsyncClient, _ClientState] = {}
         self._last_event_id: int = 0
         self._user_cache: dict[str, UserInfo] = {}
 
-    async def get_session(self) -> httpx.AsyncClient:
+    # Seconds on top of the read budget after which a call is abandoned no
+    # matter what the transport is doing: pool wait + connect + slack.
+    DEADLINE_MARGIN = _POOL_TIMEOUT + _CONNECT_TIMEOUT + _DEADLINE_SLACK
+
+    def _new_client(self, max_connections: int = _MAX_CONNECTIONS) -> httpx2.AsyncClient:
+        client = httpx2.AsyncClient(
+            timeout=httpx2.Timeout(
+                self.timeout,
+                connect=_CONNECT_TIMEOUT,
+                pool=_POOL_TIMEOUT,
+            ),
+            limits=httpx2.Limits(
+                max_connections=max_connections,
+                max_keepalive_connections=min(20, max_connections),
+            ),
+            follow_redirects=True,
+            proxy=self.proxy,
+            verify=self._verify,
+        )
+        self._clients[client] = _ClientState(limit=max_connections)
+        return client
+
+    async def get_session(self) -> httpx2.AsyncClient:
+        """The HTTP client behind Bot API calls.
+
+        Ask for it each time it is needed: the bot replaces the client when
+        its connection pool is stuck and closes the old one.
+        """
         if self._session is None or self._session.is_closed:
-            self._session = httpx.AsyncClient(
-                timeout=httpx.Timeout(
-                    self.timeout + self.poll_time,
-                    connect=10.0,
-                ),
-                follow_redirects=True,
-                proxy=self.proxy,
-                verify=self._verify,
-            )
+            if self._session is not None:
+                self._clients.pop(self._session, None)
+            self._session = self._new_client()
         return self._session
 
+    async def _get_poll_session(self) -> httpx2.AsyncClient:
+        """The HTTP client of the ``events/get`` long-poll.
+
+        It has a connection pool of its own: sends that hang on the server and
+        fill the main pool do not keep the long-poll waiting for a connection.
+        A client assigned to ``bot._session`` from outside serves the long-poll too.
+        """
+        session = self._session
+        if session is not None and not session.is_closed and session not in self._clients:
+            return session
+        if self._poll_session is None or self._poll_session.is_closed:
+            if self._poll_session is not None:
+                self._clients.pop(self._poll_session, None)
+            self._poll_session = self._new_client(_POLL_MAX_CONNECTIONS)
+        return self._poll_session
+
+    def _retire(
+        self, client: httpx2.AsyncClient, reason: str, level: int = logging.WARNING
+    ) -> None:
+        """Stop using *client* for new requests; it is closed once idle."""
+        state = self._clients.get(client)
+        if state is None or state.retired:
+            return
+        state.retired = True
+        if self._session is client:
+            self._session = None
+        if self._poll_session is client:
+            self._poll_session = None
+        logger.log(level, "Replacing the HTTP connection pool: %s", reason)
+
+    async def _close_client(self, client: httpx2.AsyncClient) -> None:
+        self._clients.pop(client, None)
+        with contextlib.suppress(Exception):
+            await client.aclose()
+
+    @contextlib.asynccontextmanager
+    async def _tracked(self, client: httpx2.AsyncClient) -> AsyncGenerator[None, None]:
+        """Count a request on *client* and replace the client when its pool is stuck.
+
+        Two signs of a stuck pool:
+
+        * ``PoolTimeout`` while fewer requests are in flight than the pool has
+          slots — the slots are held by connections that serve no request;
+        * many failed connection attempts since the pool was created — behind
+          an HTTP proxy each failed TLS handshake leaves a connection that the
+          pool never frees. The pool is replaced before they fill it.
+        """
+        state = self._clients.get(client)
+        if state is None:
+            yield
+            return
+        state.in_flight += 1
+        try:
+            yield
+        except httpx2.PoolTimeout:
+            if state.in_flight <= state.limit:
+                self._retire(
+                    client,
+                    f"no free connection with {state.in_flight} request(s) in flight "
+                    f"and a limit of {state.limit}",
+                )
+            raise
+        except (httpx2.ConnectError, httpx2.ConnectTimeout):
+            state.connect_failures += 1
+            if state.connect_failures >= max(1, state.limit // 2):
+                self._retire(
+                    client,
+                    f"{state.connect_failures} failed connection attempts since it was created",
+                    logging.INFO,
+                )
+            raise
+        finally:
+            state.in_flight -= 1
+            if state.retired and state.in_flight == 0:
+                await self._close_client(client)
+
     async def close(self) -> None:
+        for client in list(self._clients):
+            await self._close_client(client)
         if self._session and not self._session.is_closed:
             await self._session.aclose()
 
@@ -231,79 +480,250 @@ class Bot:
         params: dict[str, Any] | None = None,
         files: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """Call a Bot API method through :attr:`request_middlewares`."""
+        call: MakeRequest = self._send
+        for middleware in reversed(self.request_middlewares):
+            call = functools.partial(middleware, call)
+        return await call(endpoint, params, files)
+
+    def request_middleware(self, middleware: RequestMiddleware) -> RequestMiddleware:
+        """Register a middleware around every Bot API call (usable as a decorator).
+
+        The middleware sees one logical call: built-in retries and the format
+        fallback happen inside ``make_request``::
+
+            @bot.request_middleware
+            async def timing(make_request, endpoint, params, files):
+                started = time.monotonic()
+                try:
+                    return await make_request(endpoint, params, files)
+                finally:
+                    metrics.observe(endpoint, time.monotonic() - started)
+
+        ``params`` holds the bot token under ``"token"``.
+        """
+        self.request_middlewares.append(middleware)
+        return middleware
+
+    async def _send(
+        self,
+        endpoint: str,
+        params: dict[str, Any] | None = None,
+        files: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """The call itself: retries, format fallback, library exception types."""
+        try:
+            return await self._send_repairing_format(endpoint, params, files)
+        except httpx2.HTTPStatusError as exc:
+            raise VKTeamsHTTPError(endpoint, exc.response.status_code, exc) from exc
+        except httpx2.HTTPError as exc:
+            raise VKTeamsNetworkError(endpoint, _describe(exc), exc) from exc
+
+    async def _send_repairing_format(
+        self,
+        endpoint: str,
+        params: dict[str, Any] | None,
+        files: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Resend a message the server rejected with «Format error».
+
+        First with the markup rebuilt by :func:`vkworkspace.formatting.from_html`
+        (HTML only), then as plain text.
+        """
+        try:
+            return await self._send_with_retries(endpoint, params, files)
+        except VKTeamsAPIError as exc:
+            if not (self.format_fallback and params and _is_format_error(exc)):
+                raise
+            if files and not _files_repeatable(files):
+                raise
+            for how, repaired in _format_repairs(params):
+                try:
+                    data = await self._send_with_retries(endpoint, repaired, files)
+                except VKTeamsAPIError as again:
+                    if _is_format_error(again):
+                        continue
+                    raise
+                logger.warning(
+                    "«Format error» from %s: the message was sent %s. Text: %.300r",
+                    endpoint,
+                    how,
+                    params.get("text", params.get("caption")),
+                )
+                return data
+            raise
+
+    async def _send_with_retries(
+        self,
+        endpoint: str,
+        params: dict[str, Any] | None,
+        files: dict[str, Any] | None,
+    ) -> dict[str, Any]:
         if self._rate_limiter:
             await self._rate_limiter.acquire()
 
-        session = await self.get_session()
         url = f"{self.api_url}/{endpoint}"
 
         max_attempts = (self.retry_on_5xx or 0) + 1
-        last_exc: Exception | None = None
+        if files and not _files_repeatable(files):
+            max_attempts = 1
 
         t0 = time.monotonic()
+        # An upload takes as long as the file needs. Any other call, with all
+        # its retries, ends within the read budget plus DEADLINE_MARGIN.
+        give_up_at = (
+            None if files else t0 + self._read_budget(endpoint, params) + self.DEADLINE_MARGIN
+        )
         logger.debug("→ %s", endpoint)
 
         for attempt in range(max_attempts):
             try:
-                if files:
-                    resp = await session.post(url, data=params, files=files)
-                else:
-                    resp = await session.post(url, data=params)
-
-                resp.raise_for_status()
-                data: dict[str, Any] = resp.json()
-
-                elapsed = time.monotonic() - t0
-                logger.debug("← %s %d (%.3fs)", endpoint, resp.status_code, elapsed)
-
-                if data.get("ok") is False:
-                    description = data.get("description", "Unknown error")
-                    err = VKTeamsAPIError(method=endpoint, message=description)
-                    # "Server error: id=0x..." = server-side crash, retry like 5xx
-                    if description.startswith("Server error"):
-                        if attempt < max_attempts - 1:
-                            last_exc = err
-                            delay = min(2**attempt, 8)
-                            logger.warning(
-                                "Server error from %s (attempt %d/%d), retrying in %ds...",
-                                endpoint,
-                                attempt + 1,
-                                max_attempts,
-                                delay,
-                            )
-                            await asyncio.sleep(delay)
-                            continue
+                data = await self._call(endpoint, url, params, files, give_up_at)
+            except Exception as exc:
+                if not self._is_retryable(endpoint, exc):
+                    raise
+                if attempt >= max_attempts - 1:
+                    if isinstance(exc, VKTeamsAPIError):
                         logger.error(
                             "Server error from %s persisted after %d attempts: %s (params: %s)",
                             endpoint,
                             max_attempts,
-                            description,
+                            exc.message,
                             {k: v for k, v in (params or {}).items() if k != "token"},
                         )
-                    raise err
-                return data
-            except httpx.ConnectError as exc:
-                if _is_ssl_verification_error(exc):
-                    host = urlsplit(self.api_url).hostname
-                    raise SSLVerificationError(
-                        friendly_ssl_hint(host, mincifry=self.mincifry)
-                    ) from exc
-                raise
-            except httpx.HTTPStatusError as exc:
-                if exc.response.status_code < 500 or attempt >= max_attempts - 1:
                     raise
-                last_exc = exc
-                delay = min(2**attempt, 8)
+                delay = _jittered(min(2**attempt, 8))
+                if give_up_at is not None and time.monotonic() + delay >= give_up_at:
+                    raise  # no time left for another attempt
                 logger.warning(
-                    "5xx from %s (attempt %d/%d), retrying in %ds...",
+                    "%s from %s (attempt %d/%d), retrying in %.1fs...",
+                    self._failure_label(exc),
                     endpoint,
                     attempt + 1,
                     max_attempts,
                     delay,
                 )
                 await asyncio.sleep(delay)
+            else:
+                logger.debug("← %s (%.3fs)", endpoint, time.monotonic() - t0)
+                return data
 
-        raise last_exc  # type: ignore[misc]
+        raise RuntimeError("unreachable")  # pragma: no cover - loop returns or raises
+
+    async def _call(
+        self,
+        endpoint: str,
+        url: str,
+        params: dict[str, Any] | None,
+        files: dict[str, Any] | None,
+        give_up_at: float | None,
+    ) -> dict[str, Any]:
+        """One HTTP exchange with the Bot API. Raises on any failure."""
+        if endpoint == "events/get":
+            session = await self._get_poll_session()
+        else:
+            session = await self.get_session()
+        try:
+            async with self._tracked(session):
+                resp = await self._post(session, endpoint, url, params, files, give_up_at)
+        except httpx2.ConnectError as exc:
+            if _is_ssl_verification_error(exc):
+                host = urlsplit(self.api_url).hostname
+                raise SSLVerificationError(friendly_ssl_hint(host, mincifry=self.mincifry)) from exc
+            raise
+
+        resp.raise_for_status()
+        try:
+            data = resp.json()
+        except ValueError:
+            data = None
+        if not isinstance(data, dict):
+            # A page of a proxy or a gateway instead of the Bot API.
+            raise VKTeamsNetworkError(
+                endpoint,
+                f"the answer is not Bot API JSON (HTTP {resp.status_code}, "
+                f"{resp.headers.get('content-type', 'no content type')}): {resp.text[:200]!r}",
+            )
+        if data.get("ok") is False:
+            raise VKTeamsAPIError(method=endpoint, message=data.get("description", "Unknown error"))
+        return data
+
+    async def _post(
+        self,
+        session: httpx2.AsyncClient,
+        endpoint: str,
+        url: str,
+        params: dict[str, Any] | None,
+        files: dict[str, Any] | None,
+        give_up_at: float | None,
+    ) -> httpx2.Response:
+        """POST that is abandoned at *give_up_at* (``None`` = never: an upload).
+
+        httpx2 timeouts limit each phase (pool, connect, write, one read), not
+        the call. The call, with its retries, has a deadline of its own: the
+        read budget plus :attr:`DEADLINE_MARGIN`.
+        """
+        if give_up_at is None:
+            return await session.post(url, data=params, files=files)
+
+        kwargs: dict[str, Any] = {}
+        budget = self._read_budget(endpoint, params)
+        if endpoint == "events/get":
+            kwargs["timeout"] = httpx2.Timeout(budget, connect=_CONNECT_TIMEOUT, pool=_POOL_TIMEOUT)
+        deadline = budget + self.DEADLINE_MARGIN
+        left = give_up_at - time.monotonic()
+        try:
+            return await asyncio.wait_for(session.post(url, data=params, **kwargs), max(left, 0.0))
+        except TimeoutError:
+            # The attempt had time for every httpx2 timeout to fire and none
+            # did: the pool is stuck. A retry cut short by the deadline says nothing.
+            if left >= deadline - _DEADLINE_SLACK:
+                self._retire(session, f"{endpoint} exceeded its {deadline:.0f}s deadline")
+            raise httpx2.ReadTimeout(f"{endpoint} got no response within {deadline:.0f}s") from None
+
+    def _read_budget(self, endpoint: str, params: dict[str, Any] | None) -> float:
+        """Seconds the server may take to answer; the long-poll adds ``pollTime``."""
+        budget = float(self.timeout)
+        if endpoint == "events/get":
+            try:
+                budget += float((params or {}).get("pollTime", self.poll_time))
+            except (TypeError, ValueError):
+                budget += float(self.poll_time)
+        return budget
+
+    @staticmethod
+    def _is_retryable(endpoint: str, exc: BaseException) -> bool:
+        """Whether a failed attempt may be repeated.
+
+        * the request was not sent (connect / proxy / pool errors) — always;
+        * HTTP 5xx other than 504 and ``"Server error"`` — always;
+        * the outcome is unknown (read timeout, dropped connection, HTTP 504 —
+          the gateway stopped waiting for the server, ``"Request timed out"``)
+          — unless the method creates something new on every call
+          (see ``_NON_REPEATABLE``).
+        """
+        if isinstance(exc, _NOT_SENT_ERRORS):
+            return True
+        if isinstance(exc, httpx2.HTTPStatusError):
+            status = exc.response.status_code
+            if status == 504:
+                return endpoint not in _NON_REPEATABLE
+            return status >= 500
+        if isinstance(exc, VKTeamsAPIError):
+            if exc.message.startswith("Server error"):
+                return True
+            return exc.message.startswith("Request timed out") and endpoint not in _NON_REPEATABLE
+        if isinstance(exc, _OUTCOME_UNKNOWN_ERRORS):
+            return endpoint not in _NON_REPEATABLE
+        return False
+
+    @staticmethod
+    def _failure_label(exc: BaseException) -> str:
+        if isinstance(exc, httpx2.HTTPStatusError):
+            return f"HTTP {exc.response.status_code}"
+        if isinstance(exc, VKTeamsAPIError):
+            return f"«{exc.message}»"
+        return _describe(exc)
 
     def _resolve_parse_mode(self, parse_mode: Any) -> str | None:
         """Return explicit value or fall back to ``self.parse_mode``."""
@@ -378,6 +798,20 @@ class Bot:
             return {"file": (filename, fp)}
         return {"file": file}
 
+    async def _upload(
+        self,
+        endpoint: str,
+        params: dict[str, Any],
+        file: InputFile | BinaryIO | None,
+    ) -> dict[str, Any]:
+        """Call *endpoint* with an optional file; a file opened here is closed afterwards."""
+        files = self._file_payload(file)
+        try:
+            return await self._request(endpoint, params, files)
+        finally:
+            if files and isinstance(file, InputFile) and isinstance(file.file, (str, Path)):
+                files["file"][1].close()
+
     # ── Bot Info ──────────────────────────────────────────────────────
 
     async def get_me(self) -> BotInfo:
@@ -394,36 +828,44 @@ class Bot:
     ) -> list[Update]:
         """Long-poll for events. ``events/get``
 
-        504 Gateway Timeout is expected when the server-side reverse proxy
-        times out before ``poll_time`` elapses.  We silently return an empty
-        list so the polling loop retries immediately instead of logging a
-        traceback on a routine situation.
+        Raises like every other call when the server does not answer or answers
+        with an HTTP error. ``Dispatcher.start_polling`` logs the failure and
+        polls again after a pause.
         """
         eid = last_event_id if last_event_id is not None else self._last_event_id
         pt = poll_time if poll_time is not None else self.poll_time
 
-        try:
-            data = await self._request(
-                "events/get",
-                self._params(pollTime=pt, lastEventId=eid),
-            )
-        except httpx.HTTPStatusError as exc:
-            status = exc.response.status_code
-            if status >= 500 or status == 404:
-                logger.debug(
-                    "Long-poll returned %s, reconnecting...",
-                    status,
-                )
-                return []
-            raise
+        data = await self._request(
+            "events/get",
+            self._params(pollTime=pt, lastEventId=eid),
+        )
 
         events: list[Update] = []
+        skipped = 0
         for raw in data.get("events", []):
-            update = Update.model_validate(raw)
+            try:
+                update = Update.model_validate(raw)
+            except ValidationError as exc:
+                # One event the library cannot read must not hold back the rest:
+                # without moving past it the server returns the same batch forever.
+                skipped += 1
+                event_id = raw.get("eventId") if isinstance(raw, dict) else None
+                logger.error(
+                    "Event %s skipped — it does not match the Bot API format (%s). Raw: %.500r",
+                    event_id,
+                    "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors()),
+                    raw,
+                )
+                if isinstance(event_id, int) and event_id > self._last_event_id:
+                    self._last_event_id = event_id
+                continue
             events.append(update)
             if update.event_id > self._last_event_id:
                 self._last_event_id = update.event_id
 
+        if skipped and not events and self._last_event_id == eid:
+            # Nothing to move past (the event carries no usable id): do not spin.
+            await asyncio.sleep(1.0)
         return events
 
     # ── Messages ──────────────────────────────────────────────────────
@@ -626,8 +1068,7 @@ class Bot:
             parent_topic=self._parent_topic_json(parent_topic),
             requestId=request_id,
         )
-        files_dict = self._file_payload(file)
-        data = await self._request("messages/sendFile", params, files_dict)
+        data = await self._upload("messages/sendFile", params, file)
         return APIResponse.model_validate(data)
 
     async def send_voice(
@@ -679,8 +1120,7 @@ class Bot:
             parent_topic=self._parent_topic_json(parent_topic),
             requestId=request_id,
         )
-        files_dict = self._file_payload(file)
-        data = await self._request("messages/sendVoice", params, files_dict)
+        data = await self._upload("messages/sendVoice", params, file)
         return APIResponse.model_validate(data)
 
     async def answer_callback_query(
@@ -1041,8 +1481,7 @@ class Bot:
     ) -> APIResponse:
         """Set chat avatar. ``chats/avatar/set``"""
         params = self._params(chatId=chat_id)
-        files_dict = self._file_payload(file)
-        data = await self._request("chats/avatar/set", params, files_dict)
+        data = await self._upload("chats/avatar/set", params, file)
         return APIResponse.model_validate(data)
 
     async def send_actions(self, chat_id: str, actions: str) -> APIResponse:
@@ -1120,7 +1559,7 @@ class Bot:
             The download URL carries its access token in the **query string**,
             and that token contains a ``:`` (on‑prem tokens look like
             ``001.123.456:789``). It **must** be sent verbatim — passing it
-            through ``httpx``/``requests`` ``params=`` percent‑encodes ``:`` to
+            through ``httpx2``/``requests`` ``params=`` percent‑encodes ``:`` to
             ``%3A`` and the file host answers **HTTP 500**. This method appends
             the token to the URL *string* itself, so it is sent as‑is. This is
             the usual cause of "download returns 500 nine times out of ten".
@@ -1196,23 +1635,23 @@ class Bot:
             target = f"{url}{sep}token={self.token}"
 
         name = filename or _filename_from_url(url) or "file"
-        session = await self.get_session()
         max_attempts = (self.retry_on_5xx or 0) + 1
         last_exc: Exception | None = None
 
         for attempt in range(max_attempts):
+            session = await self.get_session()
             try:
-                # NOTE: `target` is passed as a full string on purpose so httpx
+                # NOTE: `target` is passed as a full string on purpose so httpx2
                 # does not re-encode the `:` inside the token (see docstring).
-                async with session.stream("GET", target) as resp:
+                async with self._tracked(session), session.stream("GET", target) as resp:
                     if resp.status_code >= 500 and attempt < max_attempts - 1:
                         last_exc = FileDownloadError(
                             url=target,
                             message=f"HTTP {resp.status_code} from file host",
                         )
-                        delay = min(2**attempt, 8)
+                        delay = _jittered(min(2**attempt, 8))
                         logger.warning(
-                            "File download 5xx (attempt %d/%d), retrying in %ds...",
+                            "File download 5xx (attempt %d/%d), retrying in %.1fs...",
                             attempt + 1,
                             max_attempts,
                             delay,
@@ -1229,18 +1668,16 @@ class Bot:
                             ),
                         )
                     return await self._stream_to(resp, destination, name, chunk_size)
-            except httpx.ConnectError as exc:
-                if _is_ssl_verification_error(exc):
+            except httpx2.HTTPError as exc:
+                if isinstance(exc, httpx2.ConnectError) and _is_ssl_verification_error(exc):
                     host = urlsplit(target).hostname
                     raise SSLVerificationError(
                         friendly_ssl_hint(host, mincifry=self.mincifry)
                     ) from exc
-                raise
-            except httpx.HTTPError as exc:
                 if attempt >= max_attempts - 1:
-                    raise FileDownloadError(url=target, message=str(exc)) from exc
+                    raise FileDownloadError(url=target, message=_describe(exc)) from exc
                 last_exc = exc
-                await asyncio.sleep(min(2**attempt, 8))
+                await asyncio.sleep(_jittered(min(2**attempt, 8)))
 
         raise FileDownloadError(  # pragma: no cover - loop always returns/raises
             url=target,
@@ -1249,7 +1686,7 @@ class Bot:
 
     @staticmethod
     async def _stream_to(
-        resp: httpx.Response,
+        resp: httpx2.Response,
         destination: str | Path | None,
         filename: str,
         chunk_size: int,
@@ -1259,16 +1696,22 @@ class Bot:
             chunks = [chunk async for chunk in resp.aiter_bytes(chunk_size)]
             return b"".join(chunks)
 
-        dest = Path(destination)
-        if dest.is_dir() or str(destination).endswith(("/", "\\")):
-            dest.mkdir(parents=True, exist_ok=True)
-            dest = dest / filename
-        else:
+        def prepare() -> Path:
+            dest = Path(destination)
+            if dest.is_dir() or str(destination).endswith(("/", "\\")):
+                dest.mkdir(parents=True, exist_ok=True)
+                return dest / filename
             dest.parent.mkdir(parents=True, exist_ok=True)
+            return dest
 
-        with open(dest, "wb") as fp:
+        # Disk I/O runs in a worker thread: a slow disk must not stall other chats.
+        dest = await asyncio.to_thread(prepare)
+        fp = await asyncio.to_thread(dest.open, "wb")
+        try:
             async for chunk in resp.aiter_bytes(chunk_size):
-                fp.write(chunk)
+                await asyncio.to_thread(fp.write, chunk)
+        finally:
+            await asyncio.to_thread(fp.close)
         return dest
 
     # ── Threads ───────────────────────────────────────────────────────

@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 
 from vkworkspace.client.bot import Bot
@@ -27,7 +27,7 @@ PAYLOAD = b"MZ\x90\x00\x03binary-dll-bytes"
 
 def _bot(handler: Any, **kwargs: Any) -> Bot:
     bot = Bot(token=TOKEN, api_url=API_URL, retry_on_5xx=kwargs.pop("retry_on_5xx", 0), **kwargs)
-    bot._session = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    bot._session = httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
     return bot
 
 
@@ -35,9 +35,9 @@ async def test_token_colon_not_percent_encoded():
     """The whole point: ``:`` in the token must reach the wire, not ``%3A``."""
     captured: dict[str, str] = {}
 
-    def handler(req: httpx.Request) -> httpx.Response:
+    def handler(req: httpx2.Request) -> httpx2.Response:
         captured["query"] = req.url.query.decode()
-        return httpx.Response(200, content=PAYLOAD)
+        return httpx2.Response(200, content=PAYLOAD)
 
     bot = _bot(handler)
     data = await bot.download_file_by_url(FILE_URL)
@@ -52,9 +52,9 @@ async def test_token_colon_not_percent_encoded():
 async def test_download_by_file_id_resolves_info():
     """``download_file`` calls files/getInfo then GETs the returned URL."""
 
-    def handler(req: httpx.Request) -> httpx.Response:
+    def handler(req: httpx2.Request) -> httpx2.Response:
         if req.url.path.endswith("/files/getInfo"):
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={
                     "ok": True,
@@ -65,7 +65,7 @@ async def test_download_by_file_id_resolves_info():
                 },
             )
         assert "%3A" not in req.url.query.decode()
-        return httpx.Response(200, content=PAYLOAD)
+        return httpx2.Response(200, content=PAYLOAD)
 
     bot = _bot(handler)
     data = await bot.download_file("some-file-id")
@@ -74,8 +74,8 @@ async def test_download_by_file_id_resolves_info():
 
 
 async def test_save_to_directory_uses_server_filename(tmp_path: Path):
-    def handler(req: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, content=PAYLOAD)
+    def handler(req: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, content=PAYLOAD)
 
     bot = _bot(handler)
     path = await bot.download_file_by_url(FILE_URL, tmp_path)
@@ -89,8 +89,8 @@ async def test_save_to_directory_uses_server_filename(tmp_path: Path):
 async def test_save_to_exact_path(tmp_path: Path):
     dest = tmp_path / "sub" / "out.bin"
 
-    def handler(req: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, content=PAYLOAD)
+    def handler(req: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, content=PAYLOAD)
 
     bot = _bot(handler)
     path = await bot.download_file_by_url(FILE_URL, dest)
@@ -103,9 +103,9 @@ async def test_no_double_token_if_url_already_signed():
     captured: dict[str, str] = {}
     signed = f"{FILE_URL}?token=already-here"
 
-    def handler(req: httpx.Request) -> httpx.Response:
+    def handler(req: httpx2.Request) -> httpx2.Response:
         captured["query"] = req.url.query.decode()
-        return httpx.Response(200, content=PAYLOAD)
+        return httpx2.Response(200, content=PAYLOAD)
 
     bot = _bot(handler)
     await bot.download_file_by_url(signed)
@@ -117,9 +117,9 @@ async def test_no_double_token_if_url_already_signed():
 async def test_append_token_false():
     captured: dict[str, str] = {}
 
-    def handler(req: httpx.Request) -> httpx.Response:
+    def handler(req: httpx2.Request) -> httpx2.Response:
         captured["query"] = req.url.query.decode()
-        return httpx.Response(200, content=PAYLOAD)
+        return httpx2.Response(200, content=PAYLOAD)
 
     bot = _bot(handler)
     await bot.download_file_by_url(FILE_URL, append_token=False)
@@ -128,8 +128,8 @@ async def test_append_token_false():
 
 
 async def test_500_raises_file_download_error():
-    def handler(req: httpx.Request) -> httpx.Response:
-        return httpx.Response(500, content=b"server error")
+    def handler(req: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(500, content=b"server error")
 
     bot = _bot(handler, retry_on_5xx=0)
     with pytest.raises(FileDownloadError):
@@ -140,11 +140,11 @@ async def test_500_raises_file_download_error():
 async def test_500_then_retry_succeeds():
     calls = {"n": 0}
 
-    def handler(req: httpx.Request) -> httpx.Response:
+    def handler(req: httpx2.Request) -> httpx2.Response:
         calls["n"] += 1
         if calls["n"] == 1:
-            return httpx.Response(500, content=b"transient")
-        return httpx.Response(200, content=PAYLOAD)
+            return httpx2.Response(500, content=b"transient")
+        return httpx2.Response(200, content=PAYLOAD)
 
     bot = _bot(handler, retry_on_5xx=2)
     data = await bot.download_file_by_url(FILE_URL)
@@ -154,8 +154,8 @@ async def test_500_then_retry_succeeds():
 
 
 async def test_missing_url_raises():
-    def handler(req: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"ok": True, "filename": "x", "url": None})
+    def handler(req: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"ok": True, "filename": "x", "url": None})
 
     bot = _bot(handler)
     with pytest.raises(FileDownloadError):
@@ -167,9 +167,9 @@ async def test_missing_url_raises():
 
 
 def _getinfo_then_file(handler_body: bytes = PAYLOAD) -> Any:
-    def handler(req: httpx.Request) -> httpx.Response:
+    def handler(req: httpx2.Request) -> httpx2.Response:
         if req.url.path.endswith("/files/getInfo"):
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={
                     "ok": True,
@@ -180,7 +180,7 @@ def _getinfo_then_file(handler_body: bytes = PAYLOAD) -> Any:
                 },
             )
         assert "%3A" not in req.url.query.decode()
-        return httpx.Response(200, content=handler_body)
+        return httpx2.Response(200, content=handler_body)
 
     return handler
 

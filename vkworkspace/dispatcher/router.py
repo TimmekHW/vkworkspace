@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import asyncio
+import inspect
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -194,7 +194,7 @@ class Router:
 
     async def emit_startup(self) -> None:
         for cb in self._on_startup:
-            if asyncio.iscoroutinefunction(cb):
+            if inspect.iscoroutinefunction(cb):
                 await cb()
             else:
                 cb()
@@ -203,7 +203,7 @@ class Router:
 
     async def emit_shutdown(self) -> None:
         for cb in self._on_shutdown:
-            if asyncio.iscoroutinefunction(cb):
+            if inspect.iscoroutinefunction(cb):
                 await cb()
             else:
                 cb()

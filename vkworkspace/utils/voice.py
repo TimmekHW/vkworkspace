@@ -62,11 +62,11 @@ def convert_to_ogg_opus(
 
     # Open input
     if isinstance(source, (str, Path)):
-        input_container = av.open(str(source))
+        input_container = av.open(str(source), mode="r")
     elif isinstance(source, bytes):
-        input_container = av.open(BytesIO(source))
+        input_container = av.open(BytesIO(source), mode="r")
     else:
-        input_container = av.open(source)
+        input_container = av.open(source, mode="r")
 
     output_buf = BytesIO()
 

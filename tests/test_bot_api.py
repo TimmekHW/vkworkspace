@@ -1,7 +1,7 @@
 """Tests for all Bot API methods.
 
 Every public method of ``Bot`` is tested against a mocked HTTP transport
-(``httpx.MockTransport``) — no real network calls are made.
+(``httpx2.MockTransport``) — no real network calls are made.
 """
 
 from __future__ import annotations
@@ -10,12 +10,12 @@ import io
 import json
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 
 from vkworkspace.client.bot import Bot
 from vkworkspace.enums import ParseMode
-from vkworkspace.exceptions import VKTeamsAPIError
+from vkworkspace.exceptions import VKTeamsAPIError, VKTeamsHTTPError
 from vkworkspace.types.chat import ChatInfo
 from vkworkspace.types.event import Update
 from vkworkspace.types.file import File
@@ -37,28 +37,28 @@ def _ok(**extra: Any) -> dict[str, Any]:
     return {"ok": True, **extra}
 
 
-def _make_transport(responses: dict[str, dict[str, Any]]) -> httpx.MockTransport:
-    """Create an httpx MockTransport that returns preset JSON per endpoint.
+def _make_transport(responses: dict[str, dict[str, Any]]) -> httpx2.MockTransport:
+    """Create an httpx2 MockTransport that returns preset JSON per endpoint.
 
     *responses* maps endpoint suffix (e.g. ``"self/get"``) to a JSON-
     serialisable dict.
     """
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         path = request.url.path  # e.g. /bot/v1/messages/sendText
         for endpoint, body in responses.items():
             if path.endswith(f"/{endpoint}"):
-                return httpx.Response(200, json=body)
-        return httpx.Response(404, json={"ok": False, "description": "Not found"})
+                return httpx2.Response(200, json=body)
+        return httpx2.Response(404, json={"ok": False, "description": "Not found"})
 
-    return httpx.MockTransport(handler)
+    return httpx2.MockTransport(handler)
 
 
 def _bot_with(responses: dict[str, dict[str, Any]], **kwargs: Any) -> Bot:
     """Create a Bot whose session uses a MockTransport."""
     bot = Bot(token=TOKEN, api_url=API_URL, **kwargs)
     transport = _make_transport(responses)
-    bot._session = httpx.AsyncClient(transport=transport)
+    bot._session = httpx2.AsyncClient(transport=transport)
     return bot
 
 
@@ -821,13 +821,14 @@ class TestErrorHandling:
         await bot.close()
 
     async def test_http_error_raised(self):
-        def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(500, json={"error": "Internal Server Error"})
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(500, json={"error": "Internal Server Error"})
 
         bot = Bot(token=TOKEN, api_url=API_URL)
-        bot._session = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-        with pytest.raises(httpx.HTTPStatusError):
+        bot._session = httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
+        with pytest.raises(VKTeamsHTTPError) as info:
             await bot.send_text("chat@test", "test")
+        assert info.value.status_code == 500
         await bot.close()
 
 
@@ -962,7 +963,7 @@ class TestSessionLifecycle:
     async def test_get_session_creates_client(self):
         bot = Bot(token=TOKEN, api_url=API_URL)
         session = await bot.get_session()
-        assert isinstance(session, httpx.AsyncClient)
+        assert isinstance(session, httpx2.AsyncClient)
         assert not session.is_closed
         await bot.close()
         assert session.is_closed
@@ -997,13 +998,13 @@ class TestRequestVerification:
     async def test_send_text_sends_correct_params(self):
         captured: dict[str, Any] = {}
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             captured["url"] = str(request.url)
             captured["body"] = request.content.decode()
-            return httpx.Response(200, json=_ok(msgId="m1"))
+            return httpx2.Response(200, json=_ok(msgId="m1"))
 
         bot = Bot(token=TOKEN, api_url=API_URL)
-        bot._session = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        bot._session = httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
 
         await bot.send_text("chat@test", "Hello!", request_id="rid-1")
 
@@ -1017,13 +1018,13 @@ class TestRequestVerification:
     async def test_add_chat_members_sends_correct_params(self):
         captured: dict[str, Any] = {}
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             captured["url"] = str(request.url)
             captured["body"] = request.content.decode()
-            return httpx.Response(200, json=_ok())
+            return httpx2.Response(200, json=_ok())
 
         bot = Bot(token=TOKEN, api_url=API_URL)
-        bot._session = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        bot._session = httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
 
         await bot.add_chat_members("chat@test", ["alice@test", "bob@test"])
 
@@ -1036,13 +1037,13 @@ class TestRequestVerification:
     async def test_send_text_with_deeplink_sends_correct_params(self):
         captured: dict[str, Any] = {}
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             captured["url"] = str(request.url)
             captured["body"] = request.content.decode()
-            return httpx.Response(200, json=_ok(msgId="dl"))
+            return httpx2.Response(200, json=_ok(msgId="dl"))
 
         bot = Bot(token=TOKEN, api_url=API_URL)
-        bot._session = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        bot._session = httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
 
         await bot.send_text_with_deeplink("chat@test", "Hi", deeplink="payload123")
 
@@ -1053,13 +1054,13 @@ class TestRequestVerification:
     async def test_threads_add_sends_correct_params(self):
         captured: dict[str, Any] = {}
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             captured["url"] = str(request.url)
             captured["body"] = request.content.decode()
-            return httpx.Response(200, json=_ok(threadId="t1"))
+            return httpx2.Response(200, json=_ok(threadId="t1"))
 
         bot = Bot(token=TOKEN, api_url=API_URL)
-        bot._session = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        bot._session = httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
 
         await bot.threads_add("chat@test", "msg-42")
 

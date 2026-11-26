@@ -5,6 +5,154 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.0] - 2026-11-27
+
+**A bot that takes care of itself.** It recovers from a network outage without a restart, finds the CA certificates the machine already has, and delivers a message even when its markup is broken — all with no settings. Under the hood the HTTP client is now `httpx2`, and what a `Bot` method raises is the library's own exception types.
+
+Why now: bots behind a corporate HTTP proxy went deaf during a two-day network incident. The process was alive, the pod was green, and no event reached a handler until someone restarted it. The cause turned out to be a connection-pool leak in the HTTP client (below); this release makes that whole class of failure something the bot gets out of on its own — and says loudly when it cannot.
+
+### Highlights
+
+| | Before | 2.0 |
+|---|---|---|
+| Network outage | the bot could stay deaf until restarted, silently | recovers by itself in seconds once the network is back; every failed attempt is in the log |
+| A stuck handler | stopped the whole bot | stops only its own chat |
+| «Format error» | the handler crashed, the user got nothing | the message is resent with repaired HTML, or as plain text |
+| CA certificates | OS store + `certifi`; anything else by hand | found wherever the machine keeps them — Windows stores, a Linux image, a Kubernetes mount; `certifi` is gone |
+| Errors | `httpx.*` leaked out of bot methods | `VKTeamsNetworkError`, `VKTeamsHTTPError`, `VKTeamsAPIError` |
+| Python | 3.11 — 3.14 | 3.11 — 3.15 |
+
+### Upgrading from 1.x
+
+Most bots need no changes. Check these seven things:
+
+**1. You catch `httpx` exceptions around bot calls** — catch the library's types instead. The `httpx2` exception is on `.original`.
+
+```python
+# 1.x
+try:
+    await bot.send_text(chat_id, text)
+except httpx.HTTPError:
+    ...
+
+# 2.0
+from vkworkspace.exceptions import VKTeamsHTTPError, VKTeamsNetworkError
+
+try:
+    await bot.send_text(chat_id, text)
+except VKTeamsNetworkError:      # no answer: connection, proxy, TLS, timeout
+    ...
+except VKTeamsHTTPError as e:    # HTTP 4xx / 5xx; e.status_code
+    ...
+```
+
+Both, and `VKTeamsAPIError`, derive from `VKWorkspaceError` — one `except` catches every failure of a call. An exception raised by your own hook on the HTTP client passes through unchanged. `InputFile.from_url` raises `FileDownloadError` instead of `httpx.HTTPStatusError` / `httpx.ConnectError`.
+
+**2. You give the bot your own HTTP client, or mock it in tests** — it must be an `httpx2` one. The API is the same; only the import changes.
+
+```python
+import httpx2
+
+bot._session = httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
+```
+
+`bot.get_session()` returns an `httpx2.AsyncClient`. `vkworkspace` no longer installs `httpx`; if your own code imports it, keep it in your dependencies — the two packages live side by side. Loggers are named `httpx2` and `httpcore2.*`.
+
+**3. Your handlers rely on running strictly one after another across all chats** — updates are now handled in tasks: different chats concurrently, one chat still in arrival order. To get the old behaviour back:
+
+```python
+await dp.start_polling(bot, handle_as_tasks=False)
+```
+
+On stop, handlers that are still running get 10 seconds to finish before they are cancelled (`tasks_shutdown_timeout`).
+
+**4. A call of yours legitimately takes longer than 30 seconds** — API calls now use `timeout` as documented (30s by default) instead of `timeout + poll_time` (90s), and a call without a file, with all its retries, is abandoned `timeout + 25` seconds after it started. Pass `Bot(timeout=90)` to keep the old limit.
+
+**5. You relied on the `certifi` bundle** — it is no longer loaded or installed; the bot trusts what the machine trusts. In an image with no CA certificates at all, install the distribution's `ca-certificates` package, or pass a bundle: `Bot(verify_ssl=certifi.where())`. If you call `make_ssl_context` yourself, drop its `use_truststore` and `certifi_bundle` arguments — they are gone, and passing them is a `TypeError`.
+
+**6. You handle failed calls yourself** — three defaults are different:
+
+- a network error is repeated like a 5xx (pauses of up to 1, 2 and 4 seconds) before the exception reaches your code; `Bot(retry_on_5xx=None)` turns every repeat off;
+- «Format error» no longer reaches your code — the message is resent repaired; `Bot(format_fallback=False)` brings the exception back;
+- after HTTP 504, `sendText`, `sendTextWithDeeplink`, `sendFile`, `sendVoice`, `createChat` and `threads/add` are not repeated any more: the gateway stopped waiting, but the server may still have carried the request out.
+
+**7. You call `bot.get_events()` yourself** — on HTTP 404 and 5xx it raises `VKTeamsHTTPError` instead of returning an empty list. `dp.start_polling` needs no changes.
+
+### Fixed
+
+- **A bot behind an HTTP proxy stopped receiving events and sending messages after a series of failed TLS handshakes, until restarted.** A handshake that fails after the proxy has answered `CONNECT 200` — visible only as a `ConnectError` with an empty message — leaves a connection in the HTTP client's pool that is never freed. It happens in `httpcore` 1.0.9 and in `httpcore2` 2.16.2 alike. After 100 of them the pool has no free slot: every request, the `events/get` long-poll included, ends in `PoolTimeout`, forever. In production this looked like a day of `ConnectError`s followed by nothing but `PoolTimeout`s, six an hour, until the pod was restarted. The bot now notices a stuck pool — many failed connection attempts, or a `PoolTimeout` with fewer requests in flight than the pool has slots — and switches to a fresh one. Requests in flight finish on the old pool.
+- **The polling loop went quiet.** From the 4th error in a row it logged at `DEBUG`, and the pause between attempts grew to 60 seconds. Now every failed attempt is a `WARNING` naming the exception (`PoolTimeout` used to be logged as an empty string), every 10th in a row is an `ERROR` with the time without events, and the pause is 1s → 2s → 4s → 5s at most.
+- **A server that answered the long-poll with HTTP 404 or 5xx was polled in a tight loop with nothing in the log** — 65 requests a second on the test stand, for a wrong `api_url` just as well. The first successful-looking empty answer was also logged as «Connection restored». An HTTP error is now a polling error like any other: a `WARNING`, a pause, an `ERROR` on every 10th.
+- **Nothing was retried except HTTP 5xx.** Network errors now use the same `retry_on_5xx` counter and backoff:
+
+  | What happened | Repeated for |
+  |---|---|
+  | The request was not sent: connection, proxy or pool error | every method |
+  | The outcome is unknown: read timeout, «Server disconnected without sending a response», HTTP 504, the `"Request timed out"` description | every method except `sendText`, `sendTextWithDeeplink`, `sendFile`, `sendVoice`, `createChat`, `threads/add` — a repeat could create a duplicate |
+  | HTTP 5xx other than 504, `"Server error"` | every method, as before |
+
+  HTTP 504 used to be repeated for every method: a message the server delivered after the gateway had stopped waiting arrived in up to four copies.
+
+- **A call could wait without limit.** The HTTP client limits each phase of a request, not the request. Every call without a file now has a deadline that covers all its retries — `timeout + 25` seconds, `poll_time + timeout + 25` for a long-poll. A connection pool that kept a request past the deadline is replaced.
+- An update that failed outside its handler — FSM storage down, for instance — dropped the rest of the batch it arrived in.
+- **One event the library could not parse stopped polling for good.** `get_events` raised on it, the events before it in the batch were lost, and the server kept returning the same batch. Such an event is now skipped with an `ERROR` in the log, and polling moves past it.
+- **An answer that is not Bot API JSON** — a proxy's sign-in page with HTTP 200, for instance — raised `json.JSONDecodeError` out of a bot method. It is a `VKTeamsNetworkError` that quotes the beginning of the answer.
+- **A file sent by path stayed open** — `InputFile("report.pdf")` — until the garbage collector got to it; on Windows it could not be deleted or moved meanwhile. It is closed when the call ends.
+- **`BotServer.stop()` did not wait for running handlers**: shutdown hooks and `bot.close()` ran while a handler was still working. It now waits like `dp.start_polling` does.
+- `on_startup` / `on_shutdown` hooks and Redis listener handlers were told apart with `asyncio.iscoroutinefunction`, deprecated since Python 3.14 and removed in 3.16.
+- Downloads wrote to disk inside the event loop: a slow disk stalled every chat. Files are written in a worker thread.
+- An upload from a stream that cannot be rewound was repeated after a 5xx with an empty body. It is no longer repeated.
+- `download_file` / `download_file_by_url` raised a bare `ConnectError` at once; a connection error is now retried like other network errors and ends in `FileDownloadError`.
+
+### Added
+
+- **Updates are handled in tasks** — `dp.start_polling(bot, handle_as_tasks=True, tasks_concurrency_limit=None, tasks_shutdown_timeout=10)`. A slow or stuck handler no longer delays polling or other chats. Updates of one chat are handled one at a time, in arrival order, and a button press is ordered with the messages of its chat, so FSM steps do not race. A handler running longer than 60 seconds stops holding back the next updates of its chat, so a handler that never returns does not silence the chat. On stop, running handlers get `tasks_shutdown_timeout` seconds, then are cancelled.
+- **«Format error» is repaired** — `Bot(format_fallback=True)`, on by default. A message the server rejects with «Format error» is resent: HTML is rebuilt by `from_html` (unclosed tags, a stray `<` or `&`, nesting the server does not render); if that is rejected too — or the message is MarkdownV2 or uses `format_` — the text goes without markup. Works for `sendText`, `editText` and file captions; a `WARNING` with the original text is logged. On a live server `<b>5 < 10 & up<i>x</b>` and a `<pre>` inside a `<blockquote>` are delivered with their markup.
+- **CA certificates are found, not configured.** `verify_ssl=True` starts from httpx2's own trust and adds the places OpenSSL does not read by itself:
+
+  | Where the CA certificate is | Found by |
+  |---|---|
+  | Windows — machine store, current user's store, group policy; macOS keychain | the OS verifies the certificate (httpx2) |
+  | A Linux image whose system bundle was rebuilt: Debian / Ubuntu, Alpine, RHEL / Fedora | OpenSSL system store (httpx2) |
+  | `SSL_CERT_FILE` / `SSL_CERT_DIR`, e.g. a bundle mounted into a Kubernetes pod | httpx2 |
+  | Copied into `/usr/local/share/ca-certificates`, `/etc/pki/ca-trust/source/anchors` and the like, bundle not rebuilt | vkworkspace |
+  | A `.cer` file in such a directory — Debian's `update-ca-certificates` skips the extension even when it is run; a binary (DER) `.cer` is skipped on Alpine too | vkworkspace |
+  | A file mounted into `/etc/ssl/certs` without a hash link | vkworkspace |
+  | `REQUESTS_CA_BUNDLE` / `CURL_CA_BUNDLE` | vkworkspace |
+  | A Python from uv / pyenv / conda that does not know the distribution's bundle path | httpx2 + vkworkspace |
+
+  A Минцифры root — or a private corporate CA — installed in any of these places works with no flag.
+- **`describe_trust()`** in `vkworkspace.client.ssl_utils` prints what was found on the machine and whether the Минцифры root is among it; `SSLVerificationError` says the same and what to do next.
+- **Request middleware** — `@bot.request_middleware` / `bot.request_middlewares`: `async def middleware(make_request, endpoint, params, files)` around every Bot API call, for metrics, audit or a retry policy of your own.
+- **`VKTeamsNetworkError`** (no HTTP response: connection, proxy, TLS, timeout) and **`VKTeamsHTTPError`** (HTTP 4xx / 5xx, with `status_code`); both carry `method`, `message` and `original`.
+- **The long-poll has a connection pool of its own.** With one shared pool, 300 sends hanging on the server delayed the next event by 9 seconds on the test stand; with a separate pool the delay is zero.
+- **Python 3.15.**
+- A written [versioning and compatibility policy](README.md#versioning-and-compatibility) and `SECURITY.md`.
+
+### Changed
+
+- **The HTTP client is `httpx2`** — the maintained fork of `httpx` 0.28.1 — instead of `httpx`.
+- The `redis` extra allows `redis` 5 — 8 (was `<6.0`). The minimum versions of every dependency are tested in CI.
+- Package metadata: the licence is the SPDX expression `MIT` with the licence file inside the wheel; PyPI keywords and classifiers describe a VK Teams bot framework (other projects' names are gone from the keywords); links to the changelog and to the Russian documentation; the version has one source, `vkworkspace/__meta__.py`; the source distribution holds the package, tests and examples only.
+- The release pipeline builds and publishes in separate jobs with minimal permissions, checks that the tag matches the package version, smoke-tests the wheel and the source distribution before publishing, and creates the GitHub Release only after PyPI accepted the files. GitHub Actions are pinned by commit hash.
+- CI checks formatting, runs the tests against the lowest dependency versions `pyproject.toml` allows, and treats every warning in the tests as an error.
+- Waiting for a free connection is limited to 10 seconds (was `timeout + poll_time`).
+- Pauses between retries — of a call, of a download, of polling — have a random part (from a half of the pause to all of it), so that many bots that lost the same server do not return in the same instant.
+
+### Removed
+
+- The `dev` extra. Development tools are dependency groups now (`test`, `lint`, `typing`, and `dev` = all three): `uv sync --all-extras`, or `pip install -e ".[all]" --group dev` with pip 25.1+. The `all` extra no longer pulls in pytest, ruff and pyright.
+- The `certifi` dependency and the `certifi_bundle` argument of `make_ssl_context` — httpx2 itself no longer uses `certifi`.
+- The `ssl` extra (`vkworkspace[ssl]`) and the `use_truststore` argument of `make_ssl_context` — `truststore` comes with httpx2 and is used where the OS can verify certificates.
+
+### Verified
+
+- An independent review of the whole change set before the release: 12 findings, each reproduced by a script; the confirmed ones are fixed above and covered by tests.
+- Fault-injecting stand — an HTTPS server behind a CONNECT proxy that drops tunnels, breaks handshakes, hangs and answers 502: 1.13.0 did not deliver an event in 60 seconds after the network was back; 2.0 delivers it in about 2 seconds, no restart.
+- Certificate search: Debian, Alpine and Fedora (with a Python from uv) containers, the Минцифры root installed in more than a dozen ways, against real servers behind the Минцифры CA; images without the certificate are, correctly, not trusted.
+- «Format error» repair and Windows certificate verification: against a live VK Teams server.
+- Python 3.11 — 3.15 and the free-threaded 3.15 build with the newest release of every dependency, 3.11 also with the lowest versions `pyproject.toml` allows; every warning is an error. `redis` 5.2.1 and 8.2.0 against a Redis 8 server.
+
 ## [1.13.0] - 2026-10-31
 
 ### Added

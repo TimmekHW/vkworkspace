@@ -2,7 +2,7 @@
 
 Run a bot as an HTTP service — accept requests from any system,
 send messages, handle bot events. Zero extra dependencies:
-asyncio (stdlib) for the server, httpx (already in framework) for the API.
+asyncio (stdlib) for the server, httpx2 (already in framework) for the API.
 
 Standalone server::
 
@@ -57,6 +57,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import inspect
 import json
 import logging
 import signal
@@ -220,7 +221,7 @@ class BotServer:
 
     async def _emit_startup(self) -> None:
         for cb in self._on_startup:
-            if asyncio.iscoroutinefunction(cb):
+            if inspect.iscoroutinefunction(cb):
                 await cb()
             else:
                 cb()
@@ -229,7 +230,7 @@ class BotServer:
 
     async def _emit_shutdown(self) -> None:
         for cb in self._on_shutdown:
-            if asyncio.iscoroutinefunction(cb):
+            if inspect.iscoroutinefunction(cb):
                 await cb()
             else:
                 cb()
@@ -451,11 +452,9 @@ class BotServer:
 
         except Exception:
             logger.exception("Request handling error")
-            try:
+            with contextlib.suppress(Exception):
                 self._write_response(writer, 500, {"ok": False, "error": "internal server error"})
                 await writer.drain()
-            except Exception:
-                pass
         finally:
             writer.close()
             with contextlib.suppress(Exception):
@@ -518,6 +517,10 @@ class BotServer:
             for t in tasks:
                 if not t.done():
                     t.cancel()
+            # Polling lets running handlers finish before the hooks and bot.close().
+            await asyncio.gather(*tasks, return_exceptions=True)
+            if self._dispatcher:
+                self._dispatcher._running = False
             srv.close()
             await srv.wait_closed()
             await self._emit_shutdown()
@@ -529,8 +532,6 @@ class BotServer:
         Stops the HTTP server and VK Teams polling (if enabled).
         """
         self._running = False
-        if self._dispatcher:
-            self._dispatcher._running = False
         self._shutdown_event.set()
 
     def _stop_signal(self) -> None:

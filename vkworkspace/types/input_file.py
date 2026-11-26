@@ -7,9 +7,10 @@ from pathlib import Path
 from typing import BinaryIO
 from urllib.parse import unquote, urlparse
 
-import httpx
+import httpx2
 
 from vkworkspace.client.ssl_utils import normalize_verify
+from vkworkspace.exceptions import FileDownloadError
 
 
 class InputFile:
@@ -127,7 +128,7 @@ class InputFile:
                 ``Bot(mincifry=...)``. ``None`` = library default.
 
         Raises:
-            httpx.HTTPStatusError: If the download fails (4xx/5xx).
+            FileDownloadError: If the download fails (no connection, 4xx/5xx).
             ValueError: If the file exceeds *max_size*.
 
         Example::
@@ -141,14 +142,20 @@ class InputFile:
         """
         limit = cls._DEFAULT_MAX_SIZE if max_size is None else max_size
 
-        async with httpx.AsyncClient(
-            timeout=timeout,
-            follow_redirects=True,
-            proxy=proxy,
-            verify=normalize_verify(verify, mincifry=mincifry),
-        ) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
+        try:
+            async with httpx2.AsyncClient(
+                timeout=timeout,
+                follow_redirects=True,
+                proxy=proxy,
+                verify=normalize_verify(verify, mincifry=mincifry),
+            ) as client:
+                resp = await client.get(url)
+                resp.raise_for_status()
+        except httpx2.HTTPStatusError as exc:
+            raise FileDownloadError(url, f"HTTP {exc.response.status_code}") from exc
+        except httpx2.HTTPError as exc:
+            reason = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+            raise FileDownloadError(url, reason) from exc
 
         if limit and len(resp.content) > limit:
             size_mb = len(resp.content) / 1024 / 1024

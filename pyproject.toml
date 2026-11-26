@@ -1,86 +1,173 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
 name = "vkworkspace"
-version = "1.13.0"
-description = "Fully async framework for building VK Teams (VK Workspace) bots, inspired by aiogram 3"
+dynamic = ["version"]
+description = "Async framework for building VK Teams (VK WorkSpace) bots: routers, filters, FSM, middleware, inline keyboards"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 authors = [
     { name = "Timerkhan Fattakhov", email = "timmek@users.noreply.github.com" },
 ]
 keywords = [
-    "vk", "teams", "workspace", "bot", "async", "framework",
-    "vkteams", "vkworkspace", "superapp", "vk-teams", "vk-workspace",
-    "aiogram", "httpx", "pydantic", "mailru-im-bot", "myteam",
+    "vk teams", "vkteams", "vk-teams",
+    "vk workspace", "vkworkspace", "vk-workspace",
+    "myteam",
+    "bot", "chatbot", "bot api", "bot framework",
+    "async", "asyncio", "fsm", "long polling",
+    "вк тимс", "вктимс", "вк воркспейс",
 ]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Natural Language :: English",
+    "Natural Language :: Russian",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
-    "Topic :: Communications :: Chat",
-    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Programming Language :: Python :: 3.15",
     "Framework :: AsyncIO",
+    "Framework :: Pydantic :: 2",
+    "Topic :: Communications :: Chat",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
     "Typing :: Typed",
 ]
-
 dependencies = [
-    "httpx>=0.28.1,<1.0",
+    "httpx2>=2.16.2,<3.0",
     "pydantic>=2.6,<3.0",
     "magic-filter>=1.0.12,<2.0",
 ]
 
 [project.optional-dependencies]
-redis = ["redis[hiredis]>=5.0,<6.0"]
+redis = ["redis[hiredis]>=5.0,<9.0"]
 voice = ["av>=13.0"]
-ssl = ["truststore>=0.9"]
 markdown = ["markdown-it-py>=3.0"]
-dev = [
-    "pytest>=8.0",
-    "pytest-asyncio>=0.24",
-    "pytest-cov>=5.0",
-    "ruff>=0.5",
-    "pyright>=1.1",
-    "markdown-it-py>=3.0",
-]
-all = ["vkworkspace[redis,voice,markdown,dev]"]
+all = ["vkworkspace[redis,voice,markdown]"]
 
 [project.urls]
 Homepage = "https://github.com/TimmekHW/vkworkspace"
+Documentation = "https://github.com/TimmekHW/vkworkspace#readme"
+"Документация на русском" = "https://gitverse.ru/Timmek/vkworkspace"
 Repository = "https://github.com/TimmekHW/vkworkspace"
 Issues = "https://github.com/TimmekHW/vkworkspace/issues"
-Documentation = "https://github.com/TimmekHW/vkworkspace#readme"
+Changelog = "https://github.com/TimmekHW/vkworkspace/blob/main/CHANGELOG.md"
+Telegram = "https://t.me/timmek1"
+VK = "https://vk.com/timmek"
+
+[dependency-groups]
+test = [
+    "pytest>=8.4",
+    "pytest-asyncio>=1.0",
+    "pytest-cov>=6.0",
+    "certifi>=2024.2.2",
+    "markdown-it-py>=3.0",
+]
+lint = ["ruff>=0.17,<0.18"]
+typing = ["pyright>=1.1.414"]
+dev = [
+    { include-group = "test" },
+    { include-group = "lint" },
+    { include-group = "typing" },
+]
+
+[tool.hatch.version]
+path = "vkworkspace/__meta__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["vkworkspace"]
 
+[tool.hatch.build.targets.sdist]
+include = [
+    "/vkworkspace",
+    "/tests",
+    "/examples",
+    "/CHANGELOG.md",
+    "/LICENSE",
+    "/README.md",
+    "/README_ru.md",
+]
+
+[tool.uv]
+required-version = ">=0.13"
+# Dependency cooldown: development and CI do not pick up a release in its first week.
+exclude-newer = "7 days"
+
 [tool.ruff]
+required-version = ">=0.17"
 target-version = "py311"
 line-length = 100
+extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "C901", "SIM", "PERF", "RUF"]
-ignore = ["N818", "RUF001", "RUF002", "RUF003"]
+select = [
+    "E", "F", "W",  # pycodestyle, pyflakes
+    "I",            # import order
+    "N",            # naming
+    "UP",           # idioms of the minimum supported Python
+    "B",            # likely bugs
+    "A",            # shadowed builtins
+    "C4",           # comprehensions
+    "C901",         # complexity
+    "SIM",          # simplifications
+    "PERF",         # performance
+    "ASYNC",        # blocking calls and other mistakes in async code
+    "S",            # security
+    "LOG", "G",     # logging
+    "T20",          # stray print()
+    "PT",           # pytest style
+    "PIE", "RET", "RSE", "ISC", "FURB", "PLE",
+    "RUF",
+]
+ignore = [
+    "N818",                        # exception names without the Error suffix
+    "RUF001", "RUF002", "RUF003",  # Cyrillic letters are intended
+    "ASYNC109",                    # `timeout=` parameters are part of the public API
+]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 12
 
+[tool.ruff.lint.isort]
+known-first-party = ["vkworkspace"]
+
 [tool.ruff.lint.per-file-ignores]
-"examples/**/*" = ["E501", "C901", "PERF"]
-"scripts/*" = ["E501", "C901", "PERF"]
-"tests/*" = ["C901"]
+"examples/**/*" = ["E501", "C901", "PERF", "S", "T20", "LOG015"]
+"scripts/*" = ["E501", "C901", "PERF", "S", "T20", "ASYNC"]
+"tests/*" = ["C901", "S", "T20", "ASYNC110", "PT011", "PT012"]
+"vkworkspace/server.py" = ["S104"]  # the HTTP server listens on all interfaces by default
 
 [tool.pyright]
+include = ["vkworkspace"]
 pythonVersion = "3.11"
-typeCheckingMode = "standard"
+pythonPlatform = "All"
+typeCheckingMode = "strict"
+# Strict rules the code does not pass yet.
+reportUnknownVariableType = "none"
+reportUnknownMemberType = "none"
+reportUnknownArgumentType = "none"
+reportPrivateUsage = "none"
+reportUnnecessaryIsInstance = "none"
 
 [tool.pytest.ini_options]
-asyncio_mode = "auto"
+minversion = "8.4"
 testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+source = ["vkworkspace"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]

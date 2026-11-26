@@ -33,10 +33,12 @@
 - [Все методы Bot API](#все-методы-bot-api)
 - [Инъекция зависимостей в хендлеры](#инъекция-зависимостей-в-хендлеры)
 - [Мини-приложения + Боты](#мини-приложения--боты)
+- [Версии и совместимость](#версии-и-совместимость)
 - [Тестирование](#тестирование)
 - [Примеры](#примеры)
 - [Структура проекта](#структура-проекта)
 - [Требования](#требования)
+- [Контакты](#контакты)
 - [Лицензия](#лицензия)
 
 ## vkworkspace vs mailru-im-bot
@@ -47,7 +49,7 @@
 
 | | mailru-im-bot | vkworkspace |
 |---|:---:|:---:|
-| **HTTP-клиент** | `requests` (sync) | `httpx` (async) |
+| **HTTP-клиент** | `requests` (sync) | `httpx2` (async) |
 | **Модели данных** | сырые `dict` | Pydantic v2 |
 | **Router / Dispatcher** | — | aiogram совместимые|
 | **Магические фильтры (`F`)** | — | `F.text`, `F.chat.type == "private"` |
@@ -55,7 +57,7 @@
 | **Middleware** | — | inner/outer, per-event |
 | **Конструктор клавиатур** | — | `InlineKeyboardBuilder` |
 | **Rate limiter** | — | встроенный token-bucket |
-| **Ретрай при 5xx** | — | экспоненциальный backoff |
+| **Повторы, самовосстановление после сбоев** | — | 5xx и сетевые ошибки, замена залипшего пула |
 | **Управление SSL** | — | `verify_ssl=False` |
 | **Прокси** | — | параметр `proxy=` |
 | **Инъекция зависимостей** | — | авто-инжект `bot`, `state`, `command` |
@@ -69,7 +71,7 @@
 
 ```
                           mailru-im-bot    vkworkspace     победитель
-                          (requests sync)  (httpx async)
+                          (requests sync)  (httpx2 async)
  Bot Info (self/get)         34 мс            33 мс        ~ничья
  Send Text                   82 мс           109 мс        mailru-im-bot
  Send Keyboard               97 мс            90 мс        vkworkspace
@@ -88,11 +90,11 @@ Framework overhead — **НОЛЬ** в реальных условиях. Сет
 
 ## Зачем async?
 
-Боты VK Teams 99% времени ждут сеть. Синхронные фреймворки (`requests`) блокируют весь процесс на каждом API-вызове. **vkworkspace** использует `httpx.AsyncClient` и `asyncio` — пока один запрос ждёт ответ, бот обрабатывает другие сообщения.
+Боты VK Teams 99% времени ждут сеть. Синхронные фреймворки (`requests`) блокируют весь процесс на каждом API-вызове. **vkworkspace** использует `httpx2.AsyncClient` и `asyncio` — пока один запрос ждёт ответ, бот обрабатывает другие сообщения.
 
 ## Возможности
 
-- **100% async** — `httpx` + `asyncio`, ноль блокирующих вызовов, реальная конкурентность
+- **100% async** — `httpx2` + `asyncio`, ноль блокирующих вызовов, реальная конкурентность
 - **API как в aiogram** — `Router`, `Dispatcher`, магический фильтр `F`, middleware, FSM
 - **Типобезопасность** — Pydantic v2 модели для всех типов API, полные type hints
 - **Гибкая фильтрация** — `Command`, `StateFilter`, `ChatTypeFilter`, `CallbackData`, фильтры `Reply/Forward/File/Image/Video/Audio/Voice/Sticker/Mention/Sender/URL`, regex, магические фильтры
@@ -103,7 +105,10 @@ Framework overhead — **НОЛЬ** в реальных условиях. Сет
 - **Markdown от LLM** — `from_markdown()` переводит GFM в то, что рисует ваша версия сервера VK Teams (диалекты по файлу на версию), и режет длинные ответы, не ломая разметку
 - **Конструктор клавиатур** — fluent API для inline-клавиатур со стилями кнопок
 - **Rate limiter** — встроенный ограничитель запросов (`rate_limit=5` = макс. 5 запросов/сек)
-- **Ретрай при 5xx** — автоматический ретрай с экспоненциальным backoff при серверных ошибках
+- **Переживает сбои** — повторы при 5xx и сетевых ошибках, поллинг, который не умирает молча, предел времени на каждый вызов, замена залипшего пула соединений без рестарта
+- **«Format error» чинится сам** — отклонённое сервером сообщение уходит заново с исправленным HTML или простым текстом
+- **Middleware запросов** — обёртка вокруг каждого вызова Bot API: метрики, аудит, своя политика повторов
+- **Сертификаты находятся сами** — хранилище Windows (компьютера и пользователя), системный бандл Linux-образа, бандл, примонтированный в под; корень Минцифры идёт в комплекте для машин, где его нет
 - **Управление SSL** — отключение проверки SSL для on-premise с самоподписанными сертификатами
 - **Таймаут FSM-сессий** — автоочистка брошенных FSM-форм после настраиваемого периода неактивности
 - **Прокси** — маршрутизация API-запросов через корпоративный прокси
@@ -112,7 +117,7 @@ Framework overhead — **НОЛЬ** в реальных условиях. Сет
 - **Обработка ошибок** — `@router.error()` для перехвата исключений
 - **Мульти-бот polling** — `dp.start_polling(bot1, bot2)` для нескольких ботов
 - **9 типов событий** — сообщения, правки, удаления, закрепления, вход/выход участников, инфо чата, callback
-- **Python 3.11 — 3.14** (free-threaded / no-GIL билд пока не тестировался)
+- **Python 3.11 — 3.15**, включая сборку без GIL (free-threaded): тесты идут и на ней
 
 ## Установка
 
@@ -176,8 +181,9 @@ bot = Bot(
     rate_limit=5.0,             # Макс 5 запросов/сек (None = без ограничений)
     proxy="http://proxy:8080",  # HTTP-прокси для корпоративных сетей
     parse_mode="HTML",          # Режим парсинга по умолчанию (None = обычный текст)
-    retry_on_5xx=3,             # Ретрай до 3 раз при 5xx ошибках (None = отключено)
-    verify_ssl=True,            # Системное хранилище + certifi (False = небезопасно, крайний случай)
+    retry_on_5xx=3,             # До 3 повторов при 5xx и сетевых ошибках (None = отключено)
+    format_fallback=True,       # Переотправить сообщение, отклонённое с «Format error» (False = исключение)
+    verify_ssl=True,            # Доверять тому же, чему доверяет машина (False = небезопасно, крайний случай)
     mincifry=True,              # Доверять корню Минцифры (on-premise VK Teams в РФ)
 )
 ```
@@ -204,24 +210,100 @@ bot = Bot(
 )
 ```
 
-### Ретрай при 5xx ошибках
+### Повторы
 
-Автоматический ретрай с экспоненциальным backoff (1с, 2с, 4с, макс 8с) при серверных ошибках:
+Неудачный вызов повторяется с растущей паузой — до 1с, 2с, 4с (макс 8с). Пауза каждый раз немного случайная, чтобы много ботов не возвращались к серверу одновременно:
 
 ```python
-bot = Bot(token="TOKEN", api_url="URL", retry_on_5xx=3)    # 3 ретрая (по умолчанию)
+bot = Bot(token="TOKEN", api_url="URL", retry_on_5xx=3)    # 3 повтора (по умолчанию)
 bot = Bot(token="TOKEN", api_url="URL", retry_on_5xx=None)  # Отключено
 ```
 
+| Что случилось | Для каких методов повторяем |
+|---|---|
+| HTTP 5xx, кроме 504; `"Server error"` | для всех |
+| Запрос не ушёл: ошибка соединения, прокси или пула | для всех |
+| Результат неизвестен: таймаут чтения, «Server disconnected without sending a response», HTTP 504 (шлюз не дождался сервера), `"Request timed out"` | для всех, кроме `sendText`, `sendTextWithDeeplink`, `sendFile`, `sendVoice`, `createChat`, `threads/add` — повтор может создать дубль |
+
+Повторы укладываются в предел времени вызова (см. ниже): когда времени на новую попытку не осталось, вызов завершается ошибкой.
+
+### Сетевые сбои
+
+Бот сам восстанавливается после сетевого сбоя — без рестарта и без настроек:
+
+- **Поллинг не останавливается на ошибке** — ни на сетевой, ни на HTTP 404 / 5xx от сервера. Повторяет попытки с паузой до 1с → 5с, каждую неудачную попытку пишет как `WARNING`, каждую 10-ю подряд — как `ERROR` со временем без событий.
+- **Зависший обработчик не останавливает бота.** Каждое событие обрабатывается в своей задаче (см. [Диспетчер](#диспетчер)).
+- **У каждого вызова есть предел времени — вместе со всеми повторами:** `timeout + 25` секунд, у long-poll — `poll_time + timeout + 25`. У отправки и скачивания файлов общего предела нет — они идут столько, сколько нужно файлу.
+- **У long-poll свой пул соединений.** Отправки, которые зависли на сервере и заняли основной пул, не заставляют `events/get` ждать свободного соединения.
+- **Залипший пул соединений заменяется.** За HTTP-прокси сорванное TLS-рукопожатие оставляет соединение, которое HTTP-клиент не освобождает; когда их набирается достаточно, каждый запрос вечно ждёт свободного соединения. Бот это замечает и переходит на новый пул; вызовы в полёте завершаются на старом.
+
+### Ошибки
+
+Любой сбой вызова — сеть, HTTP, ответ сервера — метод `Bot` поднимает как `VKWorkspaceError`:
+
+```python
+from vkworkspace.exceptions import VKTeamsAPIError, VKTeamsHTTPError, VKTeamsNetworkError
+
+try:
+    await bot.send_text(chat_id, "Привет")
+except VKTeamsAPIError as e:       # сервер ответил ok=false
+    print(e.method, e.message)     # "messages/sendText", "Permission denied"
+except VKTeamsNetworkError as e:   # ответа нет: соединение, прокси, TLS, таймаут
+    print(e.message, e.original)   # "ReadTimeout", исключение httpx2
+except VKTeamsHTTPError as e:      # HTTP 4xx / 5xx от шлюза
+    print(e.status_code)
+```
+
+HTTP-клиент — деталь реализации: ловите типы библиотеки, а не `httpx2.*`. Исходное исключение `httpx2` лежит в `.original`. Страница прокси вместо ответа Bot API (HTTP 200 с HTML) — тоже `VKTeamsNetworkError`. Скачивание — `download_file`, `InputFile.from_url` — поднимает `FileDownloadError`.
+
+### Middleware запросов
+
+Обёртка вокруг каждого вызова Bot API — метрики, аудит, своя политика повторов:
+
+```python
+@bot.request_middleware
+async def timing(make_request, endpoint, params, files):
+    started = time.monotonic()
+    try:
+        return await make_request(endpoint, params, files)
+    finally:
+        metrics.observe(endpoint, time.monotonic() - started)
+```
+
+Middleware видит один логический вызов; встроенные повторы происходят внутри `make_request`. В `params` под ключом `"token"` лежит токен бота.
+
+### «Format error» чинится сам
+
+Когда сервер отклоняет сообщение с «Format error», бот не падает, а отправляет заново:
+
+1. HTML пересобирается через [`from_html`](#markdown--vk-teams-ответы-llm) — незакрытые теги, одиночные `<` и `&`, вложенность, которую сервер не отображает;
+2. если и это отклонено (или сообщение в MarkdownV2) — текст уходит без разметки.
+
+Пользователь получает сообщение, в лог пишется `WARNING` с исходным текстом. Отключается через `Bot(format_fallback=False)`.
+
 ### SSL-верификация (Минцифры / приватный CA)
 
-`verify_ssl=True` (по умолчанию) доверяет **системному хранилищу** плюс бандлу
-**certifi** — в отличие от голого httpx, который берёт только certifi и не видит
-сертификаты, установленные в Windows / Linux / Docker-образ.
+При `verify_ssl=True` (по умолчанию) бот доверяет тому же, чему доверяет машина, на которой он запущен. Сертификаты **находятся сами**, настраивать ничего не нужно:
 
-On-premise серверы VK Teams в РФ обычно стоят за CA **Минцифры** (Russian
-Trusted Root CA). Его корневой сертификат идёт в комплекте с пакетом —
-включается одним переключателем, как удобнее:
+| Где лежит сертификат CA | Кто находит |
+|---|---|
+| Windows — хранилище компьютера, хранилище текущего пользователя, групповая политика | сертификат проверяет сама ОС (httpx2) |
+| Связка ключей macOS | сертификат проверяет сама ОС (httpx2) |
+| Linux-образ с пересобранным системным бандлом: Debian / Ubuntu, Alpine, RHEL / Fedora / РЕД ОС | системное хранилище OpenSSL (httpx2) |
+| `SSL_CERT_FILE` / `SSL_CERT_DIR` — например, бандл, примонтированный в под Kubernetes | httpx2 |
+| Скопирован в `/usr/local/share/ca-certificates`, `/etc/pki/ca-trust/source/anchors` и подобные, но `update-ca-certificates` / `update-ca-trust` не запускали | vkworkspace |
+| Файл `.cer` в таком каталоге — `update-ca-certificates` в Debian пропускает это расширение, даже когда его запускают; двоичный (DER) `.cer` пропускает и Alpine | vkworkspace |
+| Файл примонтирован в `/etc/ssl/certs` без хеш-ссылки | vkworkspace |
+| `REQUESTS_CA_BUNDLE` / `CURL_CA_BUNDLE` | vkworkspace |
+| Python собран не дистрибутивом (uv, pyenv, conda) и не знает путь к системному бандлу | httpx2 + vkworkspace |
+
+Поэтому корень **Минцифры**, который уже есть в образе, в хранилище Windows или в примонтированном бандле, работает без настроек. Посмотреть, что найдено на машине:
+
+```bash
+python -c "from vkworkspace.client.ssl_utils import describe_trust; print(describe_trust())"
+```
+
+Для машин, где его нет, корень Минцифры идёт в комплекте с пакетом — включается одним переключателем, как удобнее:
 
 ```python
 bot = Bot(token="TOKEN", api_url="URL", mincifry=True)          # флаг
@@ -235,11 +317,11 @@ bot = Bot(token="TOKEN", api_url="URL", verify_ssl="mincifry")  # то же са
 from vkworkspace import Bot, make_ssl_context
 
 bot = Bot(..., verify_ssl="/certs/corp-ca.pem")      # приватный корпоративный CA, поверх дефолтов
-bot = Bot(..., verify_ssl=make_ssl_context(use_truststore=True, mincifry=True))  # через OS trust API (pip install "vkworkspace[ssl]")
+bot = Bot(..., verify_ssl=make_ssl_context(system_store=False, cafile="/certs/only-this.pem"))  # только этот CA и ничего больше
 bot = Bot(..., verify_ssl=False)                      # крайний случай, небезопасно
 ```
 
-При ошибке проверки поднимается `SSLVerificationError` с готовой инструкцией.
+При ошибке проверки поднимается `SSLVerificationError`; в его тексте сказано, найден ли корень Минцифры на машине и что делать.
 
 ### Пользователи и упоминания
 
@@ -351,6 +433,17 @@ dp.include_routers(admin_router, user_router)
 # Запуск polling (поддерживает несколько ботов)
 await dp.start_polling(bot)
 await dp.start_polling(bot1, bot2, skip_updates=True)
+```
+
+Каждое событие обрабатывается в своей задаче, поэтому медленный или зависший обработчик не задерживает поллинг и другие чаты. События **одного чата** по-прежнему обрабатываются по одному, в порядке прихода — шаги FSM и нажатие кнопки после сообщения не обгоняют друг друга. Обработчик, который работает дольше 60 секунд, перестаёт задерживать следующие события своего чата, поэтому обработчик, который никогда не завершится, не заглушит чат.
+
+```python
+await dp.start_polling(
+    bot,
+    handle_as_tasks=True,          # по умолчанию; False = обрабатывать внутри цикла поллинга, по одному
+    tasks_concurrency_limit=50,    # не больше 50 работающих обработчиков на бота (по умолчанию без лимита)
+    tasks_shutdown_timeout=10,     # при остановке столько ждать работающие обработчики (по умолчанию 10с)
+)
 ```
 
 ### Роутинг отредактированных сообщений
@@ -987,6 +1080,17 @@ await message.answer(
 | [chatops.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/integrations/chatops.py) | ChatOps с RBAC, Scheduler, аудит-логом |
 | [report.py](https://github.com/TimmekHW/vkworkspace/blob/main/examples/integrations/report.py) | BI-отчёты: run_sync() для Oracle/pandas, Scheduler |
 
+## Версии и совместимость
+
+Проект следует [семантическому версионированию](https://semver.org/lang/ru/): `МАЖОР.МИНОР.ПАТЧ`.
+
+- **Публичный API** — всё, что импортируется из `vkworkspace` и его подмодулей и не начинается с подчёркивания, и всё, что описано в этом README. Имена с подчёркиванием — внутренние и могут измениться в любой версии. Одно исключение: `bot._session` — поддерживаемый способ подставить свой HTTP-клиент (`httpx2.AsyncClient`), например в тестах.
+- **Ломающее изменение** — удаление или переименование публичного имени, изменение сигнатуры, смена поведения по умолчанию. Такое выходит только в мажорной версии и описано в разделе «Upgrading» в [CHANGELOG](CHANGELOG.md).
+- **Не входит в API**: тексты исключений и сообщений в логе, `repr` объектов, точные паузы между повторами.
+- **Удаление с предупреждением**: то, что будет удалено, сначала выдаёт `DeprecationWarning` с названием замены — минимум одну минорную версию — и удаляется не раньше следующей мажорной.
+- **Python**: поддерживаются версии, которые поддерживает сама CPython (сейчас 3.11–3.15). Поддержка версии Python снимается только в минорном или мажорном релизе.
+- **Уязвимости**: как сообщить — в [SECURITY.md](SECURITY.md).
+
 ## Тестирование
 
 В проекте два вида тестов:
@@ -994,9 +1098,11 @@ await message.answer(
 ### Unit-тесты (мок)
 
 ```bash
-pip install -e ".[dev]"
-pytest tests/test_bot_api.py -v
+uv sync --all-extras        # проект, все extras, инструменты для тестов, линтера и типов
+uv run pytest tests/test_bot_api.py -v
 ```
+
+Без uv: `pip install -e ".[all]" --group dev` (pip 25.1 и новее).
 
 98 тестов покрывают все методы Bot API и FSM с моком HTTP-транспорта — реальных запросов к API не делается.
 
@@ -1026,7 +1132,7 @@ Live-тест отправляет реальные сообщения, пров
 
 ```
 vkworkspace/
-├── client/          # Асинхронный HTTP-клиент (httpx), rate limiter, прокси
+├── client/          # Асинхронный HTTP-клиент (httpx2), rate limiter, прокси
 ├── types/           # Pydantic v2 модели (Message, Chat, User, CallbackQuery, ...)
 ├── enums/           # EventType, ChatType, ParseMode, ButtonStyle, ...
 ├── dispatcher/      # Dispatcher, Router, EventObserver, Middleware pipeline
@@ -1039,9 +1145,17 @@ vkworkspace/
 ## Требования
 
 - Python 3.11+
-- httpx >= 0.28.1
+- httpx2 >= 2.16.2
 - pydantic >= 2.6
 - magic-filter >= 1.0.12
+
+## Контакты
+
+Автор — Тимерхан Фаттахов.
+
+- Telegram: [@timmek1](https://t.me/timmek1)
+- ВКонтакте: [timmek](https://vk.com/timmek)
+- Ошибки и предложения: [Issues](https://github.com/TimmekHW/vkworkspace/issues)
 
 ## Лицензия
 
@@ -1049,4 +1163,4 @@ MIT [LICENSE](https://github.com/TimmekHW/vkworkspace/blob/main/LICENSE).
 
 ---
 
-<sub>**Ключевые слова:** VK Teams бот, VK Workspace бот, VK WorkSpace, VK SuperApp, vkteams, workspace.vk.ru, workspacevk, vkworkspace, myteam.mail.ru, agent.mail.ru, mail-ru-im-bot, mailru-im-bot, bot-python, VK Teams API, VK Teams фреймворк, асинхронный бот фреймворк, Python бот VK Teams, aiogram VK Teams, httpx бот, бот для ВК Тимс, VK Workspace Python, ВК Воркспейс</sub>
+<sub>**Ключевые слова:** VK Teams бот, VK Workspace бот, VK WorkSpace, VK SuperApp, vkteams, workspace.vk.ru, workspacevk, vkworkspace, myteam.mail.ru, agent.mail.ru, mail-ru-im-bot, mailru-im-bot, bot-python, VK Teams API, VK Teams фреймворк, асинхронный бот фреймворк, Python бот VK Teams, aiogram VK Teams, httpx2 бот, бот для ВК Тимс, VK Workspace Python, ВК Воркспейс</sub>

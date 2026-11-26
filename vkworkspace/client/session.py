@@ -3,7 +3,7 @@ from __future__ import annotations
 import ssl
 from pathlib import Path
 
-import httpx
+import httpx2
 
 from vkworkspace.client.ssl_utils import normalize_verify
 
@@ -14,10 +14,10 @@ def create_session(
     proxy: str | None = None,
     verify: bool | str | Path | ssl.SSLContext = True,
     mincifry: bool | None = None,
-) -> httpx.AsyncClient:
-    """Standalone httpx client with the same TLS trust as :class:`~vkworkspace.Bot`."""
-    return httpx.AsyncClient(
-        timeout=httpx.Timeout(timeout, connect=connect_timeout),
+) -> httpx2.AsyncClient:
+    """Standalone httpx2 client with the same TLS trust as :class:`~vkworkspace.Bot`."""
+    return httpx2.AsyncClient(
+        timeout=httpx2.Timeout(timeout, connect=connect_timeout),
         follow_redirects=True,
         proxy=proxy,
         verify=normalize_verify(verify, mincifry=mincifry),

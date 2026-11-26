@@ -1,7 +1,7 @@
 # vkworkspace — Complete LLM Reference
 
 > Async Python framework for VK Teams (VK Workspace) bots, inspired by aiogram 3.
-> Version 1.12.1 · Python 3.11+ · `pip install vkworkspace`
+> Version 2.0.0 · Python 3.11+ · `pip install vkworkspace`
 
 **Этот файл — полная справка по фреймворку vkworkspace.**
 Отдайте его целиком в ChatGPT, Claude или любую другую LLM и попросите написать бота — модель сможет использовать все возможности фреймворка без дополнительной документации.
@@ -53,9 +53,10 @@ bot = Bot(
     rate_limit=None,  # max req/sec (token-bucket), None = unlimited
     proxy=None,  # corporate proxy URL
     parse_mode=None,  # default for all messages
-    retry_on_5xx=3,  # auto-retry on server errors
-    verify_ssl=True,  # False for self-signed certs
-    mincifry=None,
+    retry_on_5xx=3,  # auto-retry on server and network errors
+    verify_ssl=True,  # OS trust by default; a CA bundle path; False = insecure
+    mincifry=None,  # trust the Минцифры root CA shipped with the package
+    format_fallback=True,  # resend a message rejected with «Format error»
 )
 ```
 
@@ -182,7 +183,7 @@ bot = Bot(
 # Rate limiting: max 5 requests/sec (token-bucket)
 bot = Bot(token="TOKEN", api_url="...", rate_limit=5)
 
-# Auto-retry on 5xx errors (default: 3 retries with exponential backoff)
+# Auto-retry on 5xx and network errors (default: 3 retries with exponential backoff)
 bot = Bot(token="TOKEN", api_url="...", retry_on_5xx=3)  # None or 0 = no retry
 ```
 
@@ -869,6 +870,88 @@ dp = Dispatcher(handle_edited_as_message=True)
 # edited_message events now routed to @router.message() handlers
 ```
 
+### Errors Raised by Bot Methods
+
+Everything a `Bot` method raises derives from `VKWorkspaceError`. Catch these, never `httpx2.*`:
+
+```python
+from vkworkspace.exceptions import (
+    VKTeamsAPIError,       # the server answered ok=false: e.method, e.message
+    VKTeamsNetworkError,   # no answer (connection, proxy, TLS, timeout): e.message, e.original
+    VKTeamsHTTPError,      # HTTP 4xx/5xx from a gateway: e.status_code
+    SSLVerificationError,  # the server certificate is not trusted; the text says what to do
+    FileDownloadError,     # download_file / InputFile.from_url failed
+    VKWorkspaceError,      # base class of all of the above
+)
+
+try:
+    await bot.send_text(chat_id, "Hello")
+except VKTeamsAPIError as e:
+    if e.message == "Permission denied":
+        ...
+except VKTeamsNetworkError:
+    ...  # the message may or may not have been delivered
+```
+
+### What the Bot Does on Its Own (no code needed)
+
+- **Retries** (`retry_on_5xx=3`, pauses of up to 1s, 2s, 4s): HTTP 5xx, `"Server error"`, and
+  network errors. A request that was not sent is repeated for every method. One with an unknown
+  outcome (read timeout, dropped connection, HTTP 504, `"Request timed out"`) is repeated for
+  every method EXCEPT
+  `send_text`, `send_text_with_deeplink`, `send_file`, `send_voice`, `create_chat`,
+  `threads_add` — repeating those could create a duplicate, so they raise `VKTeamsNetworkError`.
+- **«Format error»** (`format_fallback=True`): a message the server rejects for broken markup is
+  resent with repaired HTML, then as plain text. Do not write your own try/except for it.
+- **Deadline**: a call without a file, with all its retries, is abandoned `timeout + 25`
+  seconds after it started.
+- **Polling never stops**: errors are logged as WARNING and retried every 1–5 s; an event the
+  library cannot parse is skipped with an ERROR in the log.
+- **TLS**: `verify_ssl=True` trusts what the machine trusts (Windows store, the system CA bundle
+  of a Linux image, `SSL_CERT_FILE`). Never suggest `verify_ssl=False`; for a server behind the
+  Минцифры CA on a machine without that certificate use `Bot(mincifry=True)`.
+
+### Polling Options
+
+```python
+await dp.start_polling(
+    bot,
+    skip_updates=False,            # drop updates that arrived while the bot was down
+    handle_as_tasks=True,          # default: every update in its own task; one chat stays in order
+    tasks_concurrency_limit=None,  # e.g. 50 = at most 50 handlers running at once, per bot
+    tasks_shutdown_timeout=10,     # seconds to wait for running handlers on stop
+    handle_signals=True,           # False when embedded in FastAPI etc.
+    close_bot_on_stop=True,        # False when the Bot is shared with other code
+)
+```
+
+Handlers of different chats run concurrently: do not keep per-request state in module globals.
+Blocking code (`time.sleep`, `requests`) still blocks every chat — wrap it in `run_sync`.
+
+### Request Middleware (wraps every Bot API call)
+
+```python
+@bot.request_middleware
+async def timing(make_request, endpoint, params, files):
+    started = time.monotonic()
+    try:
+        return await make_request(endpoint, params, files)   # retries happen inside
+    finally:
+        metrics.observe(endpoint, time.monotonic() - started)
+```
+
+### Tests: Mock the HTTP Client
+
+```python
+import httpx2
+
+def handler(request: httpx2.Request) -> httpx2.Response:
+    return httpx2.Response(200, json={"ok": True, "msgId": "1"})
+
+bot = Bot(token="t", api_url="https://mock.test/bot/v1")
+bot._session = httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
+```
+
 ---
 
 ## Threads
@@ -1256,6 +1339,7 @@ from vkworkspace.utils.format_builder import FormatBuilder
 from vkworkspace.utils.sync import run_sync, sync_to_async
 from vkworkspace.utils.scheduler import Scheduler
 from vkworkspace.enums import ButtonStyle, ChatAction, ParseMode, ChatType
+from vkworkspace.exceptions import VKTeamsAPIError, VKTeamsNetworkError, VKTeamsHTTPError, VKWorkspaceError
 ```
 ---
 

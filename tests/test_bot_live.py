@@ -99,7 +99,8 @@ async def run_tests(token: str, api_url: str, chat_id: str) -> tuple[int, int, i
     # basic
     try:
         r = await bot.send_text(chat_id, "vkworkspace live test: basic text")
-        assert r.ok and r.msg_id
+        assert r.ok
+        assert r.msg_id
         cleanup_msgs.append(r.msg_id)
         ok("send_text (basic)", f"msgId={r.msg_id}")
         basic_msg_id = r.msg_id

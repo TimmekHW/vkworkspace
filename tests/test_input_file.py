@@ -5,9 +5,10 @@ from io import BytesIO
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-import httpx
+import httpx2
 import pytest
 
+from vkworkspace.exceptions import FileDownloadError
 from vkworkspace.types.input_file import InputFile, _filename_from_url
 
 # ── Existing behaviour ───────────────────────────────────────────────
@@ -93,13 +94,13 @@ class TestFromBase64:
 class TestFromUrl:
     @pytest.mark.asyncio
     async def test_downloads_and_wraps(self):
-        fake_resp = httpx.Response(
+        fake_resp = httpx2.Response(
             200,
             content=b"image bytes",
-            request=httpx.Request("GET", "https://example.com/photo.jpg"),
+            request=httpx2.Request("GET", "https://example.com/photo.jpg"),
         )
 
-        with patch("vkworkspace.types.input_file.httpx.AsyncClient") as mock_cls:
+        with patch("vkworkspace.types.input_file.httpx2.AsyncClient") as mock_cls:
             mock_client = AsyncMock()
             mock_client.get = AsyncMock(return_value=fake_resp)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -114,11 +115,11 @@ class TestFromUrl:
 
     @pytest.mark.asyncio
     async def test_custom_filename_overrides(self):
-        fake_resp = httpx.Response(
-            200, content=b"data", request=httpx.Request("GET", "https://example.com/photo.jpg")
+        fake_resp = httpx2.Response(
+            200, content=b"data", request=httpx2.Request("GET", "https://example.com/photo.jpg")
         )
 
-        with patch("vkworkspace.types.input_file.httpx.AsyncClient") as mock_cls:
+        with patch("vkworkspace.types.input_file.httpx2.AsyncClient") as mock_cls:
             mock_client = AsyncMock()
             mock_client.get = AsyncMock(return_value=fake_resp)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -135,17 +136,29 @@ class TestFromUrl:
 
     @pytest.mark.asyncio
     async def test_http_error_propagates(self):
-        fake_resp = httpx.Response(404, request=httpx.Request("GET", "https://x.com/missing.jpg"))
+        fake_resp = httpx2.Response(404, request=httpx2.Request("GET", "https://x.com/missing.jpg"))
 
-        with patch("vkworkspace.types.input_file.httpx.AsyncClient") as mock_cls:
+        with patch("vkworkspace.types.input_file.httpx2.AsyncClient") as mock_cls:
             mock_client = AsyncMock()
             mock_client.get = AsyncMock(return_value=fake_resp)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=False)
             mock_cls.return_value = mock_client
 
-            with pytest.raises(httpx.HTTPStatusError):
+            with pytest.raises(FileDownloadError, match="HTTP 404"):
                 await InputFile.from_url("https://x.com/missing.jpg")
+
+    @pytest.mark.asyncio
+    async def test_network_error_is_a_download_error(self):
+        with patch("vkworkspace.types.input_file.httpx2.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(side_effect=httpx2.ConnectError("no route"))
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_cls.return_value = mock_client
+
+            with pytest.raises(FileDownloadError, match="ConnectError: no route"):
+                await InputFile.from_url("https://x.com/a.jpg")
 
 
 # ── _filename_from_url ───────────────────────────────────────────────

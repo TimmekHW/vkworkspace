@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import Field
 
@@ -562,12 +563,11 @@ class Message(VKTeamsObject):
                 paths = await message.download_all("/downloads/")
         """
         directory = Path(destination)
-        directory.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(directory.mkdir, parents=True, exist_ok=True)
         results: list[Path] = []
         for item in self.attachments:
             path = await item.download(directory, **kwargs)
-            assert isinstance(path, Path)  # directory destination always yields a Path
-            results.append(path)
+            results.append(Path(cast("Path", path)))  # a directory destination yields a Path
         return results
 
     async def answer(

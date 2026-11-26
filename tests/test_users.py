@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 
 from vkworkspace.client.bot import Bot
@@ -32,13 +32,13 @@ USER_REPLY: dict[str, Any] = {
 def _bot(reply: dict[str, Any]) -> tuple[Bot, dict[str, int]]:
     calls = {"n": 0}
 
-    def handler(req: httpx.Request) -> httpx.Response:
+    def handler(req: httpx2.Request) -> httpx2.Response:
         calls["n"] += 1
         assert req.url.path.endswith("/chats/getInfo")
-        return httpx.Response(200, json=reply)
+        return httpx2.Response(200, json=reply)
 
     bot = Bot(token=TOKEN, api_url=API_URL)
-    bot._session = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    bot._session = httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
     return bot, calls
 
 

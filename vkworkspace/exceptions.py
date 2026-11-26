@@ -12,6 +12,44 @@ class VKTeamsAPIError(VKWorkspaceError):
         super().__init__(f"API error in {method}: {message}")
 
 
+class VKTeamsNetworkError(VKWorkspaceError):
+    """The request got no HTTP response: connection, proxy, TLS or timeout failure.
+
+    Attributes:
+        method: Bot API method, e.g. ``"messages/sendText"``.
+        message: The HTTP client error by type and text: ``"ReadTimeout"``,
+            ``"ConnectError: ..."``.
+        original: The ``httpx2`` exception (also ``__cause__``).
+    """
+
+    def __init__(self, method: str, message: str, original: BaseException | None = None) -> None:
+        self.method = method
+        self.message = message
+        self.original = original
+        super().__init__(f"Network error in {method}: {message}")
+
+
+class VKTeamsHTTPError(VKWorkspaceError):
+    """The server answered with an HTTP error status (4xx / 5xx).
+
+    Attributes:
+        method: Bot API method.
+        status_code: HTTP status.
+        message: ``"HTTP 504"``.
+        original: The ``httpx2.HTTPStatusError`` (also ``__cause__``); its
+            ``response`` holds the body and headers.
+    """
+
+    def __init__(
+        self, method: str, status_code: int, original: BaseException | None = None
+    ) -> None:
+        self.method = method
+        self.status_code = status_code
+        self.message = f"HTTP {status_code}"
+        self.original = original
+        super().__init__(f"HTTP error in {method}: {self.message}")
+
+
 class InvalidToken(VKWorkspaceError):
     pass
 
@@ -19,7 +57,7 @@ class InvalidToken(VKWorkspaceError):
 class SSLVerificationError(VKWorkspaceError):
     """TLS certificate verification failed (commonly the Минцифры CA).
 
-    Raised instead of a bare ``httpx.ConnectError`` so the traceback carries
+    Raised instead of a bare ``ConnectError`` so the traceback carries
     a copy‑paste remedy. See :func:`vkworkspace.client.ssl_utils.make_ssl_context`.
     """
 
