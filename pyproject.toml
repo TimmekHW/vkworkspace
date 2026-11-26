@@ -107,7 +107,10 @@ line-length = 100
 extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
-select = [
+# The groups below are added to ruff's default rule set (`extend-select`); `select`
+# would replace the defaults. The default set changes only with a minor release of
+# ruff, and the minor is pinned in the `lint` dependency group.
+extend-select = [
     "E", "F", "W",  # pycodestyle, pyflakes
     "I",            # import order
     "N",            # naming
@@ -123,7 +126,7 @@ select = [
     "LOG", "G",     # logging
     "T20",          # stray print()
     "PT",           # pytest style
-    "PIE", "RET", "RSE", "ISC", "FURB", "PLE",
+    "RET", "RSE", "ISC", "FURB", "PLE",
     "RUF",
 ]
 ignore = [
@@ -140,8 +143,9 @@ known-first-party = ["vkworkspace"]
 
 [tool.ruff.lint.per-file-ignores]
 "examples/**/*" = ["E501", "C901", "PERF", "S", "T20", "LOG015"]
-"scripts/*" = ["E501", "C901", "PERF", "S", "T20", "ASYNC"]
+"scripts/*" = ["E501", "C901", "PERF", "S", "T20", "ASYNC", "BLE001"]
 "tests/*" = ["C901", "S", "T20", "ASYNC110", "PT011", "PT012"]
+"tests/test_bot_live.py" = ["BLE001"]  # a live check reports every failure and goes on
 "vkworkspace/server.py" = ["S104"]  # the HTTP server listens on all interfaces by default
 
 [tool.pyright]
@@ -149,11 +153,15 @@ include = ["vkworkspace"]
 pythonVersion = "3.11"
 pythonPlatform = "All"
 typeCheckingMode = "strict"
-# Strict rules the code does not pass yet.
+reportUnnecessaryTypeIgnoreComment = "error"
+# Strict rules that are off.
+# Bot API answers are JSON: `dict[str, Any]` values are unknown by nature.
 reportUnknownVariableType = "none"
 reportUnknownMemberType = "none"
 reportUnknownArgumentType = "none"
+# A leading underscore marks a name as private to the package, not to its module.
 reportPrivateUsage = "none"
+# Arguments are checked at runtime too: not every caller is type-checked.
 reportUnnecessaryIsInstance = "none"
 
 [tool.pytest.ini_options]

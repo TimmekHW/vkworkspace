@@ -479,3 +479,29 @@ async def test_bot_server_stop_waits_for_running_handlers():
     server.stop()
     await asyncio.wait_for(running, timeout=5)
     assert order == ["handler finished", "shutdown hook"]
+
+
+async def test_failing_error_handler_is_logged_and_does_not_stop_the_bot(caplog):
+    """A handler raised, and the error handler raised too: both are in the log."""
+    dp = Dispatcher()
+    dp._running = True
+    handled: list[str] = []
+
+    @dp.message()
+    async def on_message(message: Message) -> None:
+        if message.chat.chat_id == "a@x":
+            raise RuntimeError("handler is broken")
+        handled.append(message.text)
+
+    @dp.error()
+    async def on_error(error: Exception) -> None:
+        raise ValueError("error handler is broken")
+
+    bot = _Feed([_message(1, "a@x"), _message(2, "b@x")])
+    with caplog.at_level(logging.ERROR, logger="vkworkspace.dispatcher"):
+        task = asyncio.create_task(dp._polling(bot))
+        await _until(lambda: handled == ["m2"])
+    assert "handler is broken" in caplog.text
+    assert "error handler is broken" in caplog.text
+    assert not task.done()
+    await _stop(dp, task)

@@ -25,7 +25,7 @@ class ErrorsMiddleware(BaseMiddleware):
         except (SkipHandler, CancelHandler):
             raise
         except Exception as e:
-            logger.exception("Error in handler: %s", e)
+            logger.exception("Error in handler")
             result = await self.router.propagate_event(
                 update_type="error",
                 event=e,

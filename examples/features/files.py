@@ -129,7 +129,6 @@ async def cmd_photo(message: Message, bot: Bot) -> None:
 # 7. Resend by file_id (no re-upload)
 @router.message(Command("fileid"))
 async def cmd_fileid(message: Message, bot: Bot) -> None:
-    global last_file_id
     if last_file_id is None:
         await message.answer("Send any file first, then use /fileid to resend it.")
         return

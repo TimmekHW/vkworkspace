@@ -354,7 +354,7 @@ def friendly_ssl_hint(host: str | None = None, *, mincifry: bool | None = None) 
     head = f"Не удалось проверить TLS-сертификат сервера{where}. "
     try:
         in_system = _mincifry_in_system_store()
-    except Exception:  # the hint must not replace the error it explains
+    except Exception:  # noqa: BLE001 - the hint must not replace the error it explains
         in_system = None
     if not resolve_mincifry(mincifry):
         if in_system:

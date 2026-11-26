@@ -28,9 +28,9 @@ from pathlib import Path
 from typing import BinaryIO
 
 try:
-    import av  # type: ignore[import-not-found]
+    import av
 except ImportError:
-    av = None  # type: ignore[assignment]
+    av = None
 
 _IMPORT_ERROR_MSG = (
     "PyAV is required for audio conversion. "

@@ -25,7 +25,7 @@ class State:
         state_name = self._state_name or ""
         return f"{group_name}:{state_name}"
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, State):
             return self.state == other.state
         if isinstance(other, str):

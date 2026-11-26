@@ -157,8 +157,7 @@ class DiagnosticClient:
 
         for ev in events:
             eid = ev.get("eventId", 0)
-            if eid > self._last_event_id:
-                self._last_event_id = eid
+            self._last_event_id = max(self._last_event_id, eid)
 
             # === THE MAIN LOG: every raw event, untouched ===
             write_log(
@@ -518,7 +517,7 @@ async def main() -> None:
         except KeyboardInterrupt:
             break
         except Exception as e:
-            log.exception("Polling error: %s", e)
+            log.exception("Polling error")
             write_log({"_type": "POLL_ERROR", "error": str(e)})
             await asyncio.sleep(2)
             continue
@@ -620,7 +619,7 @@ async def main() -> None:
                         )
 
             except Exception as e:
-                log.exception("Error handling event %s: %s", event_type, e)
+                log.exception("Error handling event %s", event_type)
                 write_log(
                     {
                         "_type": "HANDLER_ERROR",

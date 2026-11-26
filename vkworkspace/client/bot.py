@@ -12,7 +12,7 @@ import ssl
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator
 from pathlib import Path
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, Self
 from urllib.parse import urlsplit
 
 import httpx2
@@ -453,7 +453,7 @@ class Bot:
         if self._session and not self._session.is_closed:
             await self._session.aclose()
 
-    async def __aenter__(self) -> Bot:
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, *args: object) -> None:
@@ -860,8 +860,7 @@ class Bot:
                     self._last_event_id = event_id
                 continue
             events.append(update)
-            if update.event_id > self._last_event_id:
-                self._last_event_id = update.event_id
+            self._last_event_id = max(self._last_event_id, update.event_id)
 
         if skipped and not events and self._last_event_id == eid:
             # Nothing to move past (the event carries no usable id): do not spin.

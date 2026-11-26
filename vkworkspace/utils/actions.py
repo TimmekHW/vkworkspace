@@ -28,7 +28,7 @@ import asyncio
 import contextlib
 import functools
 from collections.abc import Callable, Coroutine
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Self
 
 from vkworkspace.enums.chat_action import ChatAction
 
@@ -144,7 +144,7 @@ class ChatActionSender:
             await self.bot.send_actions(self.chat_id, self.action)
             await asyncio.sleep(self.interval)
 
-    async def __aenter__(self) -> ChatActionSender:
+    async def __aenter__(self) -> Self:
         self._task = asyncio.create_task(self._keep_sending())
         return self
 

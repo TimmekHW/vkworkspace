@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- `async with Bot(...) as bot` and `async with ChatActionSender(...)` are typed as the class they are called on (`Self`): a subclass of `Bot` used to come out of `async with` typed as plain `Bot`.
+- An error handler (`@router.error()`) that raises is logged — «Error handler failed» with the traceback. It used to be dropped without a trace.
+
+### Changed
+
+- The linter checks ruff's default rule set plus the project's own groups (601 rules instead of 475): `extend-select` instead of `select`, which had replaced the defaults.
+- Stale `# type: ignore` comments are a type-check error.
+- «Error processing update» and «Error in handler» no longer repeat the exception text in the message line; it is in the traceback below.
+
 ## [2.0.0] - 2026-11-27
 
 **A bot that takes care of itself.** It recovers from a network outage without a restart, finds the CA certificates the machine already has, and delivers a message even when its markup is broken — all with no settings. Under the hood the HTTP client is now `httpx2`, and what a `Bot` method raises is the library's own exception types.

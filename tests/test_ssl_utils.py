@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import ssl
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 import certifi
 import httpx2
@@ -422,7 +422,7 @@ async def test_from_url_follows_flag(monkeypatch: pytest.MonkeyPatch):
         def __init__(self, **kwargs: Any) -> None:
             captured.update(kwargs)
 
-        async def __aenter__(self) -> FakeClient:
+        async def __aenter__(self) -> Self:
             return self
 
         async def __aexit__(self, *args: object) -> None:

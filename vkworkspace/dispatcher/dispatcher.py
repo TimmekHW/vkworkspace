@@ -221,7 +221,7 @@ class Dispatcher(Router):
                 **extra,
             )
         except Exception as e:
-            logger.exception("Error processing update: %s", e)
+            logger.exception("Error processing update")
             try:
                 result = await self.propagate_event(
                     update_type="error",
@@ -229,6 +229,7 @@ class Dispatcher(Router):
                     **extra,
                 )
             except Exception:
+                logger.exception("Error handler failed")
                 return UNHANDLED
 
         # Update FSM session timestamp after handler
@@ -269,7 +270,7 @@ class Dispatcher(Router):
                     updates = await bot.get_events()
                 except asyncio.CancelledError:
                     break
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 - polling goes on after any failure
                     consecutive_errors += 1
                     if consecutive_errors == 1:
                         failing_since = time.monotonic()
