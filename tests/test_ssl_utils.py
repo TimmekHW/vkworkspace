@@ -498,7 +498,9 @@ async def test_verification_failure_raises_the_library_error_with_a_remedy(monke
     def handler(request: httpx2.Request) -> httpx2.Response:
         raise _verify_failure()
 
-    bot = Bot(token="t", api_url="https://api.vkteams.example/bot/v1", retry_on_5xx=None)
+    bot = Bot(
+        token="t", api_url="https://api.vkteams.example/bot/v1", retry_on_5xx=None, mincifry=False
+    )
     bot._session = httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
     with pytest.raises(SSLVerificationError, match=r"api.vkteams.example") as info:
         await bot.send_text("c@x", "hi")
