@@ -279,6 +279,8 @@ When the server rejects a message with «Format error», the bot resends it inst
 1. HTML is rebuilt by [`from_html`](#markdown--vk-teams-llm-answers) — unclosed tags, a stray `<` or `&`, nesting the server does not render;
 2. if that is rejected too (or the message is MarkdownV2), the text goes without markup.
 
+Where the text without markup comes from: for a message passed as a `Text` tree — from the tree (`as_plain()`): links as `text (url)`, list items with `•`, no asterisks or brackets. A ready MarkdownV2 string has no tree, so only its escaping is removed and the markup characters stay. Formatted text is better passed as a tree.
+
 The user gets the message, the log gets a `WARNING` with the original text. `Bot(format_fallback=False)` turns it off.
 
 ### SSL verification (Минцифры / private CA)
@@ -686,7 +688,7 @@ for chunk in split_text(long_text, max_length=2000):
 
 ### Text Builder (aiogram-style)
 
-Composable formatting nodes with auto-escaping and automatic `parse_mode`. No need to think about which parse mode to use — `as_kwargs()` handles it:
+Composable formatting nodes with auto-escaping. A tree goes straight into `answer`, `reply`, `edit_text`, `send_text` and the caption of `send_file`, and is rendered for the parse mode of the call or of the bot; with neither set — as HTML:
 
 ```python
 from vkworkspace.utils.text import Text, Bold, Italic, Code, Link, Pre, Quote, Mention
@@ -697,17 +699,20 @@ content = Text(
     "Status: ", Italic("processing"), "\n",
     "Total: ", Code("$99.99"),
 )
-await message.answer(**content.as_kwargs())  # text + parse_mode="HTML" auto
+await message.answer(content)               # the bot's parse_mode, or HTML without one
 
 # Nesting works
 content = Bold(Italic("bold italic"))           # <b><i>bold italic</i></b>
 
 # Operator chaining
 content = "Hello, " + Bold("World") + "!"      # Text node
-await message.answer(**content.as_kwargs())
+await message.answer(content)
 
 # Render as MarkdownV2 instead
-await message.answer(**content.as_kwargs("MarkdownV2"))
+await message.answer(content, parse_mode="MarkdownV2")
+
+# Strings for your own use
+content.as_html(), content.as_markdown(), content.as_plain()
 ```
 
 Available nodes: `Text`, `Bold`, `Italic`, `Underline`, `Strikethrough`, `Code`, `Pre`, `Link`, `Mention`, `Quote`, `OrderedList`, `UnorderedList`, `Raw`
@@ -724,16 +729,12 @@ LLMs answer in Markdown: `**bold**`, `` `code` ``, fenced blocks, lists, tables.
 
 ```python
 from vkworkspace.formatting import from_markdown   # pip install "vkworkspace[markdown]"
-from vkworkspace.exceptions import VKTeamsAPIError
 
 doc = from_markdown(llm_answer)
 
 # long answers: split between blocks and lines, never inside markup
 for part in doc.split("MarkdownV2"):
-    try:
-        await message.answer(**part.as_kwargs("MarkdownV2"))
-    except VKTeamsAPIError:
-        await message.answer(part.as_plain(), parse_mode=None)
+    await message.answer(part, parse_mode="MarkdownV2")
 ```
 
 | Markdown | Sent as |
@@ -753,7 +754,7 @@ The LLM writes HTML instead (`<b>`, `<i>`, `<br>`, sometimes `` `code` `` in bac
 from vkworkspace.formatting import from_html
 
 doc = from_html(llm_html)   # <br> → line break, `x` → code, <pre> in a quote → code lines
-await message.answer(**doc.as_kwargs("HTML"))
+await message.answer(doc, parse_mode="HTML")
 ```
 
 Tags VK Teams has become their nodes, `<p>` / `<div>` / headings start a line, a table becomes a monospace block, unknown tags keep their text, a stray `<` stays text. `split()`, `as_plain()` and dialects work the same.

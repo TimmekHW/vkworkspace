@@ -1046,7 +1046,7 @@ content = Text(
     Bold("Welcome"), ", ", Italic("user"), "!\\n",
     "Click ", Link("here", "https://example.com"),
 )
-await message.answer(**content.as_kwargs())  # auto parse_mode
+await message.answer(content)   # a tree: rendered for the bot's parse_mode, HTML without one
 
 # Split long text
 from vkworkspace.utils.text import split_text
@@ -1062,7 +1062,7 @@ from vkworkspace.formatting import from_markdown
 
 doc = from_markdown(llm_answer)          # GFM -> node tree, dialect "vkteams-25.4"
 for part in doc.split("MarkdownV2"):     # cut between blocks/lines, never inside markup
-    await message.answer(**part.as_kwargs("MarkdownV2"))
+    await message.answer(part, parse_mode="MarkdownV2")   # pass the tree, not a string
 
 doc.as_plain()                           # no markup, for parse_mode=None
 from_markdown(text, dialect="vkteams-docs")   # every documented style as markup
@@ -1070,7 +1070,7 @@ from_markdown(text, dialect="vkteams-docs")   # every documented style as markup
 
 from vkworkspace.formatting import from_html  # LLM wrote HTML (stdlib only)
 doc = from_html(llm_html)                # <br> -> newline, `x` -> code, <p>/<h3> -> lines
-await message.answer(**doc.as_kwargs("HTML"))
+await message.answer(doc, parse_mode="HTML")
 ```
 
 Dialects (`vkworkspace/formatting/dialects/*.toml`) describe one VK Teams server
@@ -1215,6 +1215,8 @@ except VKTeamsNetworkError:
   `threads_add` — repeating those could create a duplicate, so they raise `VKTeamsNetworkError`.
 - **«Format error»** (`format_fallback=True`): a message the server rejects for broken markup is
   resent with repaired HTML, then as plain text. Do not write your own try/except for it.
+  Pass formatted text as a `Text` tree (`from_markdown(...)`, `Text(...)`), not as a rendered
+  string: the plain text then comes from the tree, without markup characters.
 - **Deadline**: a call without a file, with all its retries, is abandoned `timeout + 25`
   seconds after it started.
 - **Polling never stops**: errors are logged as WARNING and retried every 1–5 s; an event the

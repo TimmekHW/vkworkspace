@@ -279,6 +279,8 @@ Middleware видит один логический вызов; встроенн
 1. HTML пересобирается через [`from_html`](#markdown--vk-teams-ответы-llm) — незакрытые теги, одиночные `<` и `&`, вложенность, которую сервер не отображает;
 2. если и это отклонено (или сообщение в MarkdownV2) — текст уходит без разметки.
 
+Откуда берётся текст без разметки: у сообщения, переданного деревом `Text`, — из дерева (`as_plain()`): ссылки как `текст (url)`, пункты списка с `•`, ни звёздочек, ни скобок. У готовой строки MarkdownV2 дерева нет, с неё снимается только экранирование, знаки разметки остаются. Поэтому отформатированный текст лучше передавать деревом.
+
 Пользователь получает сообщение, в лог пишется `WARNING` с исходным текстом. Отключается через `Bot(format_fallback=False)`.
 
 ### SSL-верификация (Минцифры / приватный CA)
@@ -669,7 +671,7 @@ for chunk in split_text(long_text, max_length=2000):
 
 ### Text Builder (как в aiogram)
 
-Компонуемые ноды форматирования с автоэкранированием и автоматическим `parse_mode`. Не нужно думать о режиме — `as_kwargs()` сам всё решает:
+Компонуемые ноды форматирования с автоэкранированием. Дерево передаётся прямо в `answer`, `reply`, `edit_text`, `send_text` и в подпись `send_file` и рендерится под режим вызова или бота; если режим не задан нигде — как HTML:
 
 ```python
 from vkworkspace.utils.text import Text, Bold, Italic, Code, Link, Pre, Quote, Mention
@@ -680,17 +682,20 @@ content = Text(
     "Статус: ", Italic("в обработке"), "\n",
     "Итого: ", Code("$99.99"),
 )
-await message.answer(**content.as_kwargs())  # text + parse_mode="HTML" автоматически
+await message.answer(content)               # под parse_mode бота, без него — HTML
 
 # Вложенность работает
 content = Bold(Italic("жирный курсив"))         # <b><i>жирный курсив</i></b>
 
 # Операторы для цепочек
 content = "Привет, " + Bold("Мир") + "!"        # нода Text
-await message.answer(**content.as_kwargs())
+await message.answer(content)
 
 # Отрендерить как MarkdownV2
-await message.answer(**content.as_kwargs("MarkdownV2"))
+await message.answer(content, parse_mode="MarkdownV2")
+
+# Строки для своих нужд
+content.as_html(), content.as_markdown(), content.as_plain()
 ```
 
 Доступные ноды: `Text`, `Bold`, `Italic`, `Underline`, `Strikethrough`, `Code`, `Pre`, `Link`, `Mention`, `Quote`, `OrderedList`, `UnorderedList`, `Raw`
@@ -707,16 +712,12 @@ LLM отвечают в Markdown: `**жирный**`, `` `код` ``, блоки
 
 ```python
 from vkworkspace.formatting import from_markdown   # pip install "vkworkspace[markdown]"
-from vkworkspace.exceptions import VKTeamsAPIError
 
 doc = from_markdown(llm_answer)
 
 # длинные ответы: режется между блоками и строками, никогда внутри разметки
 for part in doc.split("MarkdownV2"):
-    try:
-        await message.answer(**part.as_kwargs("MarkdownV2"))
-    except VKTeamsAPIError:
-        await message.answer(part.as_plain(), parse_mode=None)
+    await message.answer(part, parse_mode="MarkdownV2")
 ```
 
 | Markdown | Уходит как |
@@ -736,7 +737,7 @@ LLM пишет сразу HTML (`<b>`, `<i>`, `<br>`, иногда `` `код` `
 from vkworkspace.formatting import from_html
 
 doc = from_html(llm_html)   # <br> → перенос, `x` → код, <pre> в цитате → строки кода
-await message.answer(**doc.as_kwargs("HTML"))
+await message.answer(doc, parse_mode="HTML")
 ```
 
 Теги, которые есть в VK Teams, становятся нодами; `<p>` / `<div>` / заголовки начинают строку; таблица — моноширинный блок; неизвестные теги оставляют свой текст; одиночный `<` остаётся текстом. `split()`, `as_plain()` и диалекты работают так же.

@@ -40,6 +40,8 @@ from vkworkspace.types.message import ParentMessage
 from vkworkspace.types.response import APIResponse
 from vkworkspace.types.thread import Thread, ThreadSubscribers
 from vkworkspace.types.user import BotInfo, ChatMember, User, UserInfo
+from vkworkspace.utils.text import _mode as _text_mode
+from vkworkspace.utils.text import _Node
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +121,20 @@ RequestMiddleware = Callable[
 _MARKDOWN_ESCAPE = re.compile(r"\\(.)", re.DOTALL)
 
 
+class _Rendered(str):
+    """Markup rendered from a :class:`~vkworkspace.utils.text.Text` tree.
+
+    Keeps the plain-text form of the tree for the «Format error» fallback.
+    """
+
+    plain: str
+
+    def __new__(cls, markup: str, plain: str) -> Self:
+        self = super().__new__(cls, markup)
+        self.plain = plain
+        return self
+
+
 def _is_format_error(exc: VKTeamsAPIError) -> bool:
     return exc.message.startswith("Format error")
 
@@ -130,20 +146,28 @@ def _format_repairs(params: dict[str, Any]) -> Iterator[tuple[str, dict[str, Any
         return
     text: str = params[field]
     mode = str(params.get("parseMode") or "").lower()
-    plain = text
+    # A message built from a Text tree carries its own plain text; for a
+    # ready string the plain text is recovered from the markup.
+    plain: str | None = text.plain if isinstance(text, _Rendered) else None
     if mode == "html":
         from vkworkspace.formatting import from_html
 
         try:
             tree = from_html(text)
-            repaired, plain = tree.as_html(), tree.as_plain()
+            repaired = tree.as_html()
+            if plain is None:
+                plain = tree.as_plain()
         except Exception:  # the fallback must not replace the server's error with its own
             logger.debug("from_html failed on a rejected message", exc_info=True)
-            return
+            if plain is None:
+                return
+            repaired = ""
         if repaired and repaired != text:
             yield "with repaired HTML", {**params, field: repaired}
-    elif mode == "markdownv2":
+    elif mode == "markdownv2" and plain is None:
         plain = _MARKDOWN_ESCAPE.sub(r"\1", text)
+    if plain is None:
+        plain = text
     if not plain:
         return
     without = {k: v for k, v in params.items() if k not in ("parseMode", "format")}
@@ -731,6 +755,29 @@ class Bot:
             return self.parse_mode
         return str(parse_mode) if parse_mode is not None else None
 
+    def _render(self, text: Any, parse_mode: Any, format_: Any) -> tuple[Any, str | None]:
+        """The ``text`` and ``parseMode`` request values for *text*.
+
+        A string goes as it is. A :class:`~vkworkspace.utils.text.Text` tree is
+        rendered for the parse mode of the call, else of the bot; with neither
+        set — as HTML, like ``str(tree)``. ``parse_mode=None`` renders plain text.
+        """
+        mode = self._resolve_parse_mode(parse_mode)
+        if not isinstance(text, _Node):
+            return text, mode
+        if format_ is not None:
+            raise ValueError(
+                "format_ marks up plain text by offsets and cannot be combined with a Text tree"
+            )
+        if mode is None and parse_mode is _UNSET:
+            mode = "HTML"
+        kind = _text_mode(mode)
+        if kind == "plain":
+            return text.as_plain(), None
+        if kind == "markdownv2":
+            return _Rendered(text.as_markdown(), text.as_plain()), "MarkdownV2"
+        return _Rendered(text.as_html(), text.as_plain()), "HTML"
+
     @staticmethod
     def _keyboard_json(keyboard: Any) -> str | None:
         if keyboard is None:
@@ -874,7 +921,7 @@ class Bot:
     async def send_text(
         self,
         chat_id: str,
-        text: str,
+        text: str | _Node,
         reply_msg_id: str | list[str] | None = None,
         forward_chat_id: str | None = None,
         forward_msg_id: str | list[str] | None = None,
@@ -888,7 +935,10 @@ class Bot:
 
         Args:
             chat_id: Target chat ID (email-like, e.g. ``"user@company.ru"``).
-            text: Message text (max ~4096 chars recommended).
+            text: Message text (max ~4096 chars recommended) — a string, or a
+                :class:`~vkworkspace.utils.text.Text` tree, which is rendered
+                for the parse mode. If the server rejects a tree with
+                «Format error», its plain text is sent instead.
             reply_msg_id: Message ID(s) to reply to.
             forward_chat_id: Chat to forward from.
             forward_msg_id: Message ID(s) to forward.
@@ -912,22 +962,23 @@ class Bot:
             builder.button(text="OK", callback_data="ok")
             await bot.send_text(chat_id, "Choose:", inline_keyboard_markup=builder.as_markup())
         """
-        if len(text) > self.TEXT_LENGTH_WARNING:
+        body, mode = self._render(text, parse_mode, format_)
+        if len(body) > self.TEXT_LENGTH_WARNING:
             logger.warning(
                 "Text length %d exceeds %d chars — may cause UI lag or be rejected by the server",
-                len(text),
+                len(body),
                 self.TEXT_LENGTH_WARNING,
             )
         data = await self._request(
             "messages/sendText",
             self._params(
                 chatId=chat_id,
-                text=text,
+                text=body,
                 replyMsgId=self._msg_ids(reply_msg_id),
                 forwardChatId=forward_chat_id,
                 forwardMsgId=self._msg_ids(forward_msg_id),
                 inlineKeyboardMarkup=self._keyboard_json(inline_keyboard_markup),
-                parseMode=self._resolve_parse_mode(parse_mode),
+                parseMode=mode,
                 format=self._format_json(format_),
                 parent_topic=self._parent_topic_json(parent_topic),
                 requestId=request_id,
@@ -938,7 +989,7 @@ class Bot:
     async def send_text_with_deeplink(
         self,
         chat_id: str,
-        text: str,
+        text: str | _Node,
         deeplink: str,
         inline_keyboard_markup: Any = None,
         parse_mode: ParseMode | str | None = _UNSET,
@@ -949,14 +1000,15 @@ class Bot:
         *deeplink* is an identifier passed to the bot when a user taps
         the deeplink button — useful for mini-app or bot-start scenarios.
         """
+        body, mode = self._render(text, parse_mode, format_)
         data = await self._request(
             "messages/sendTextWithDeeplink",
             self._params(
                 chatId=chat_id,
-                text=text,
+                text=body,
                 deeplink=deeplink,
                 inlineKeyboardMarkup=self._keyboard_json(inline_keyboard_markup),
-                parseMode=self._resolve_parse_mode(parse_mode),
+                parseMode=mode,
                 format=self._format_json(format_),
             ),
         )
@@ -966,16 +1018,21 @@ class Bot:
         self,
         chat_id: str,
         msg_id: str,
-        text: str,
+        text: str | _Node,
         inline_keyboard_markup: Any = None,
         parse_mode: ParseMode | str | None = _UNSET,
         format_: dict[str, Any] | Any | None = None,
     ) -> APIResponse:
-        """Edit message text. ``messages/editText``"""
-        if len(text) > self.TEXT_LENGTH_WARNING:
+        """Edit message text. ``messages/editText``
+
+        *text* is a string or a :class:`~vkworkspace.utils.text.Text` tree,
+        as in :meth:`send_text`.
+        """
+        body, mode = self._render(text, parse_mode, format_)
+        if len(body) > self.TEXT_LENGTH_WARNING:
             logger.warning(
                 "Text length %d exceeds %d chars — may cause UI lag or be rejected by the server",
-                len(text),
+                len(body),
                 self.TEXT_LENGTH_WARNING,
             )
         data = await self._request(
@@ -983,9 +1040,9 @@ class Bot:
             self._params(
                 chatId=chat_id,
                 msgId=msg_id,
-                text=text,
+                text=body,
                 inlineKeyboardMarkup=self._keyboard_json(inline_keyboard_markup),
-                parseMode=self._resolve_parse_mode(parse_mode),
+                parseMode=mode,
                 format=self._format_json(format_),
             ),
         )
@@ -1008,7 +1065,7 @@ class Bot:
         chat_id: str,
         file_id: str | None = None,
         file: InputFile | BinaryIO | None = None,
-        caption: str | None = None,
+        caption: str | _Node | None = None,
         reply_msg_id: str | list[str] | None = None,
         forward_chat_id: str | None = None,
         forward_msg_id: str | list[str] | None = None,
@@ -1029,7 +1086,8 @@ class Bot:
             chat_id: Target chat ID.
             file_id: ID of a previously uploaded file (no re-upload needed).
             file: File to upload — ``InputFile``, or open ``BinaryIO``.
-            caption: Text caption shown below the file.
+            caption: Text caption shown below the file — a string or a
+                :class:`~vkworkspace.utils.text.Text` tree.
             reply_msg_id: Message ID(s) to reply to.
             forward_chat_id: Chat to forward from.
             forward_msg_id: Message ID(s) to forward.
@@ -1054,15 +1112,16 @@ class Bot:
             # Resend by file_id (instant, no re-upload)
             await bot.send_file(chat_id, file_id="abc123")
         """
+        body, mode = self._render(caption, parse_mode, format_)
         params = self._params(
             chatId=chat_id,
             fileId=file_id,
-            caption=caption,
+            caption=body,
             replyMsgId=self._msg_ids(reply_msg_id),
             forwardChatId=forward_chat_id,
             forwardMsgId=self._msg_ids(forward_msg_id),
             inlineKeyboardMarkup=self._keyboard_json(inline_keyboard_markup),
-            parseMode=self._resolve_parse_mode(parse_mode),
+            parseMode=mode,
             format=self._format_json(format_),
             parent_topic=self._parent_topic_json(parent_topic),
             requestId=request_id,

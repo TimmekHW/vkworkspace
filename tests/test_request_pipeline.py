@@ -23,6 +23,8 @@ from vkworkspace.exceptions import (
     VKTeamsNetworkError,
     VKWorkspaceError,
 )
+from vkworkspace.formatting import from_markdown
+from vkworkspace.utils.text import Bold, Code, Italic, Text
 
 API_URL = "https://mock.vkteams.test/bot/v1"
 TOKEN = "test-token-001"
@@ -439,4 +441,129 @@ class TestFormatFallback:
         with pytest.raises(VKTeamsAPIError, match="Permission denied"):
             await bot.send_text("c@x", "<b>x", parse_mode="HTML")
         assert len(sent) == 2
+        await bot.close()
+
+
+# ── a Text tree instead of a string ─────────────────────────────────────
+
+MARKDOWN = "**Итог:** `x` и [ссылка](https://example.org/a_b)\n\n- пункт 1\n- пункт 2"
+PLAIN = "Итог: x и ссылка (https://example.org/a_b)\n\n• пункт 1\n• пункт 2"
+
+
+class TestTextTree:
+    async def test_tree_is_rendered_for_the_parse_mode_of_the_call(self, sent):
+        tree = from_markdown(MARKDOWN)
+        bot = _bot(_rejecting(sent, lambda f: True))
+        await bot.send_text("c@x", tree, parse_mode="MarkdownV2")
+        await bot.send_text("c@x", tree, parse_mode="HTML")
+        await bot.send_text("c@x", tree, parse_mode=None)
+        assert (sent[0]["text"], sent[0]["parseMode"]) == (tree.as_markdown(), "MarkdownV2")
+        assert (sent[1]["text"], sent[1]["parseMode"]) == (tree.as_html(), "HTML")
+        assert sent[2]["text"] == PLAIN
+        assert "parseMode" not in sent[2]
+        await bot.close()
+
+    async def test_parse_mode_of_the_bot_and_html_when_none_is_set(self, sent):
+        tree = Text("Цена: ", Bold("100"))
+        bot = _bot(_rejecting(sent, lambda f: True), parse_mode="MarkdownV2")
+        await bot.send_text("c@x", tree)
+        assert (sent[0]["text"], sent[0]["parseMode"]) == ("Цена: *100*", "MarkdownV2")
+        await bot.close()
+
+        bot = _bot(_rejecting(sent, lambda f: True))
+        await bot.send_text("c@x", tree)
+        assert (sent[1]["text"], sent[1]["parseMode"]) == ("Цена: <b>100</b>", "HTML")
+        await bot.close()
+
+    async def test_rejected_markdown_tree_goes_as_its_plain_text(self, sent, caplog):
+        """The plain text comes from the tree: no asterisks, backticks or [text](url)."""
+        bot = _bot(_rejecting(sent, lambda f: "parseMode" not in f))
+        with caplog.at_level(logging.WARNING, logger="vkworkspace.client.bot"):
+            resp = await bot.send_text("c@x", from_markdown(MARKDOWN), parse_mode="MarkdownV2")
+        assert resp.msg_id == "m1"
+        assert [f.get("parseMode") for f in sent] == ["MarkdownV2", None]
+        assert sent[1]["text"] == PLAIN
+        assert "the message was sent as plain text" in caplog.text
+        await bot.close()
+
+    async def test_rejected_html_tree_goes_as_its_plain_text(self, sent):
+        bot = _bot(_rejecting(sent, lambda f: "parseMode" not in f))
+        await bot.send_text("c@x", from_markdown(MARKDOWN), parse_mode="HTML")
+        assert sent[0]["parseMode"] == "HTML"
+        assert "parseMode" not in sent[-1]
+        assert sent[-1]["text"] == PLAIN
+        await bot.close()
+
+    async def test_edit_text_and_caption_take_a_tree(self, sent):
+        tree = Text("Отчёт ", Code("v2"))
+        bot = _bot(_rejecting(sent, lambda f: "parseMode" not in f))
+        await bot.edit_text("c@x", "1", tree, parse_mode="MarkdownV2")
+        assert (sent[0]["text"], sent[1]["text"]) == ("Отчёт `v2`", "Отчёт v2")
+        await bot.send_file("c@x", file=io.BytesIO(b"data"), caption=tree, parse_mode="MarkdownV2")
+        assert (sent[2]["caption"], sent[3]["caption"]) == ("Отчёт `v2`", "Отчёт v2")
+        await bot.send_text_with_deeplink("c@x", tree, deeplink="start", parse_mode="HTML")
+        assert sent[4]["text"] == "Отчёт <code>v2</code>"
+        await bot.close()
+
+    async def test_error_is_raised_when_the_plain_text_is_rejected_too(self, sent):
+        bot = _bot(_rejecting(sent, lambda f: False))
+        with pytest.raises(VKTeamsAPIError, match="Format error"):
+            await bot.send_text("c@x", from_markdown(MARKDOWN), parse_mode="MarkdownV2")
+        assert len(sent) == 2
+        await bot.close()
+
+    async def test_no_resend_when_the_fallback_is_off_or_the_error_is_another(self, sent):
+        bot = _bot(_rejecting(sent, lambda f: False), format_fallback=False)
+        with pytest.raises(VKTeamsAPIError, match="Format error"):
+            await bot.send_text("c@x", Text(Bold("x")), parse_mode="MarkdownV2")
+        assert len(sent) == 1
+        await bot.close()
+
+        calls = 0
+
+        def gateway_timeout(request: httpx2.Request) -> httpx2.Response:
+            nonlocal calls
+            calls += 1
+            return httpx2.Response(504)
+
+        bot = _bot(gateway_timeout)
+        with pytest.raises(VKTeamsHTTPError):
+            await bot.send_text("c@x", Text(Bold("x")), parse_mode="MarkdownV2")
+        assert calls == 1
+        await bot.close()
+
+    async def test_middleware_sees_one_call_with_the_rendered_string(self, sent):
+        seen: list[Any] = []
+        bot = _bot(_rejecting(sent, lambda f: "parseMode" not in f))
+
+        @bot.request_middleware
+        async def spy(make_request: Any, endpoint: str, params: Any, files: Any) -> Any:
+            seen.append((endpoint, params["text"], params.get("parseMode")))
+            return await make_request(endpoint, params, files)
+
+        await bot.send_text("c@x", Text("a ", Bold("b")), parse_mode="MarkdownV2")
+        assert seen == [("messages/sendText", "a *b*", "MarkdownV2")]
+        assert isinstance(seen[0][1], str)
+        assert len(sent) == 2
+        await bot.close()
+
+    async def test_offset_formatting_cannot_be_combined_with_a_tree(self):
+        bot = _bot(lambda request: httpx2.Response(200, json=OK))
+        with pytest.raises(ValueError, match="format_"):
+            await bot.send_text("c@x", Text("x"), format_={"bold": [{"offset": 0, "length": 1}]})
+        await bot.close()
+
+    async def test_message_methods_take_a_tree(self, sent):
+        from vkworkspace.types.chat import Chat
+        from vkworkspace.types.message import Message
+
+        bot = _bot(_rejecting(sent, lambda f: True), parse_mode="HTML")
+        message = Message.model_construct(msg_id="1", chat=Chat(chatId="c@x", type="private"))
+        message.set_bot(bot)
+        tree = Text("Готово: ", Bold("да"))
+        answered = await message.answer(tree)
+        replied = await message.reply(tree, parse_mode="MarkdownV2")
+        await answered.edit_text(Text(Italic("правка")))
+        assert [f["text"] for f in sent] == ["Готово: <b>да</b>", "Готово: *да*", "<i>правка</i>"]
+        assert answered.text == replied.text == "Готово: да"
         await bot.close()

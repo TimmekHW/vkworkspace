@@ -13,8 +13,15 @@ from .user import Contact, _NamedUser
 if TYPE_CHECKING:
     from vkworkspace.enums import ChatAction, ParseMode
     from vkworkspace.utils.actions import ChatActionSender
+    from vkworkspace.utils.text import _Node
 
 _UNSET: Any = object()
+
+
+def _plain(text: Any) -> Any:
+    """Text to keep on a sent message: a Text tree is kept as its plain text."""
+    as_plain = getattr(text, "as_plain", None)
+    return as_plain() if callable(as_plain) else text
 
 
 # ── Format spans (offset/length ranges in text) ──────────────────
@@ -572,7 +579,7 @@ class Message(VKTeamsObject):
 
     async def answer(
         self,
-        text: str,
+        text: str | _Node,
         parse_mode: ParseMode | str | None = _UNSET,
         inline_keyboard_markup: Any = None,
         **kwargs: Any,
@@ -585,7 +592,7 @@ class Message(VKTeamsObject):
         ``.edit_text()``, etc. on it directly.
 
         Args:
-            text: Message text.
+            text: Message text — a string or a :class:`~vkworkspace.utils.text.Text` tree.
             parse_mode: ``"HTML"`` / ``"MarkdownV2"`` / ``None``.
             inline_keyboard_markup: Inline keyboard.
             **kwargs: Extra args passed to ``bot.send_text()``.
@@ -618,13 +625,13 @@ class Message(VKTeamsObject):
             text=text,
             **kwargs,
         )
-        sent = Message.model_construct(msg_id=resp.msg_id or "", chat=self.chat, text=text)
+        sent = Message.model_construct(msg_id=resp.msg_id or "", chat=self.chat, text=_plain(text))
         sent.set_bot(self.bot)
         return sent
 
     async def answer_thread(
         self,
-        text: str,
+        text: str | _Node,
         parse_mode: ParseMode | str | None = _UNSET,
         inline_keyboard_markup: Any = None,
         **kwargs: Any,
@@ -656,13 +663,13 @@ class Message(VKTeamsObject):
             parent_topic=pt,
             **kwargs,
         )
-        sent = Message.model_construct(msg_id=resp.msg_id or "", chat=self.chat, text=text)
+        sent = Message.model_construct(msg_id=resp.msg_id or "", chat=self.chat, text=_plain(text))
         sent.set_bot(self.bot)
         return sent
 
     async def reply(
         self,
-        text: str,
+        text: str | _Node,
         parse_mode: ParseMode | str | None = _UNSET,
         inline_keyboard_markup: Any = None,
         **kwargs: Any,
@@ -694,7 +701,7 @@ class Message(VKTeamsObject):
             reply_msg_id=self.msg_id,
             **kwargs,
         )
-        sent = Message.model_construct(msg_id=resp.msg_id or "", chat=self.chat, text=text)
+        sent = Message.model_construct(msg_id=resp.msg_id or "", chat=self.chat, text=_plain(text))
         sent.set_bot(self.bot)
         return sent
 
@@ -707,7 +714,7 @@ class Message(VKTeamsObject):
 
     async def edit_text(
         self,
-        text: str,
+        text: str | _Node,
         parse_mode: ParseMode | str | None = _UNSET,
         inline_keyboard_markup: Any = None,
         **kwargs: Any,
@@ -806,7 +813,7 @@ class Message(VKTeamsObject):
         self,
         file_id: str | None = None,
         file: Any = None,
-        caption: str | None = None,
+        caption: str | _Node | None = None,
         parse_mode: ParseMode | str | None = _UNSET,
         inline_keyboard_markup: Any = None,
         **kwargs: Any,

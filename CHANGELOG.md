@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Send methods take a `Text` tree, not only a string**: `send_text`, `edit_text`, `send_text_with_deeplink`, the caption of `send_file`, and `Message.answer` / `answer_thread` / `reply` / `edit_text` / `answer_file`. The tree is rendered for the `parse_mode` of the call, else of the bot, else as HTML; `parse_mode=None` sends its plain text.
+
+  ```python
+  for part in from_markdown(llm_answer).split("MarkdownV2"):
+      await message.answer(part, parse_mode="MarkdownV2")
+  ```
+
+- **«Format error» on a tree falls back to the tree's plain text** (`as_plain()`): links as `text (url)`, list items with `•`. A MarkdownV2 string used to go out with its asterisks, backticks and brackets, because only the escaping could be removed from a string. Bots that kept `format_fallback=False` and their own retry for this can drop both.
+
 ### Fixed
 
 - `async with Bot(...) as bot` and `async with ChatActionSender(...)` are typed as the class they are called on (`Self`): a subclass of `Bot` used to come out of `async with` typed as plain `Bot`.
