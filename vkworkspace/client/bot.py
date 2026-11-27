@@ -10,7 +10,7 @@ import random
 import re
 import ssl
 import time
-from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator
 from pathlib import Path
 from typing import Any, BinaryIO, Self
 from urllib.parse import urlsplit
@@ -1333,11 +1333,44 @@ class Bot:
         chat_id: str,
         cursor: str | None = None,
     ) -> dict[str, Any]:
-        """Get chat members. ``chats/getMembers``"""
+        """Get one page of chat members. ``chats/getMembers``
+
+        Returns the answer as the server sent it: ``{"members": [...], "cursor": ...}``.
+        For every member of the chat use :meth:`iter_chat_members`.
+        """
         return await self._request(
             "chats/getMembers",
             self._params(chatId=chat_id, cursor=cursor),
         )
+
+    async def iter_chat_members(self, chat_id: str) -> AsyncIterator[dict[str, Any]]:
+        """Every member of a chat, one by one. ``chats/getMembers``
+
+        The next page is requested when the previous one is used up. Each item
+        is a member as the server sent it — ``userId`` and, depending on the
+        server, ``sn``, ``nick``, ``username``, ``name``, ``creator``, ``admin``.
+
+        Example::
+
+            async for member in bot.iter_chat_members(chat_id):
+                print(member["userId"])
+
+            ids = [m["userId"] async for m in bot.iter_chat_members(chat_id)]
+        """
+        cursor: str | None = None
+        while True:
+            page = await self.get_chat_members(chat_id, cursor=cursor)
+            for member in page.get("members") or []:
+                yield member
+            following = page.get("cursor")
+            if not following:
+                return
+            if following == cursor:
+                logger.warning(
+                    "chats/getMembers returned the same cursor twice for %s — stopping", chat_id
+                )
+                return
+            cursor = following
 
     async def get_blocked_users(self, chat_id: str) -> list[User]:
         """Get blocked users. ``chats/getBlockedUsers``"""

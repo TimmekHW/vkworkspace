@@ -1,7 +1,7 @@
 # vkworkspace — Complete LLM Reference
 
 > Async Python framework for VK Teams (VK Workspace) bots, inspired by aiogram 3.
-> Version 2.0.0 · Python 3.11+ · `pip install vkworkspace`
+> Version 2.1.0 · Python 3.11+ · `pip install vkworkspace`
 
 **Этот файл — полная справка по фреймворку vkworkspace.**
 Отдайте его целиком в ChatGPT, Claude или любую другую LLM и попросите написать бота — модель сможет использовать все возможности фреймворка без дополнительной документации.
@@ -76,7 +76,8 @@ bot = Bot(
 | `await bot.get_user(...)` → `UserInfo` | `chats/getInfo` | Resolve a user by(email) or |
 | `await bot.get_user_name(...)` → `str` |  | of a user byor nick. Shortcut for :meth:`get_user` |
 | `await bot.get_chat_admins(...)` → `list[ChatMember]` | `chats/getAdmins` | Get chat admins.(read-only) |
-| `await bot.get_chat_members(...)` → `dict[str, Any]` | `chats/getMembers` | Get chat members |
+| `await bot.get_chat_members(...)` → `dict[str, Any]` | `chats/getMembers` | Get one page of chat members |
+| `await bot.iter_chat_members(...)` → `AsyncIterator[dict[str, Any]]` | `chats/getMembers` | Every member of a chat, one by one |
 | `await bot.get_blocked_users(...)` → `list[User]` | `chats/getBlockedUsers` | Get blocked users |
 | `await bot.get_pending_users(...)` → `list[User]` | `chats/getPendingUsers` | Get pending users |
 | `await bot.block_user(...)` → `APIResponse` | `chats/blockUser` | Block user |

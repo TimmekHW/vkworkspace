@@ -5,7 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.1.0] - 2026-11-27
+
+Formatted text goes to the bot as a tree, and a rejected one comes back to the chat as clean plain text. Nothing changes for code that sends strings.
 
 ### Added
 
@@ -15,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   for part in from_markdown(llm_answer).split("MarkdownV2"):
       await message.answer(part, parse_mode="MarkdownV2")
   ```
+
+- **`bot.iter_chat_members(chat_id)`** — every member of a chat with `async for`; the pages of `chats/getMembers` are fetched as needed, and each item is the member as the server sent it. `get_chat_members` still returns one raw page.
 
 - **«Format error» on a tree falls back to the tree's plain text** (`as_plain()`): links as `text (url)`, list items with `•`. A MarkdownV2 string used to go out with its asterisks, backticks and brackets, because only the escaping could be removed from a string. Bots that kept `format_fallback=False` and their own retry for this can drop both.
 
@@ -513,6 +517,23 @@ On stop, handlers that are still running get 10 seconds to finish before they ar
 - Inline keyboard builder utility
 - 10 example bots (echo, keyboard, FSM, middleware, proxy, diagnostic, API tester, etc.)
 
+[2.1.0]: https://github.com/TimmekHW/vkworkspace/compare/v2.0.0...v2.1.0
+[2.0.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.13.0...v2.0.0
+[1.13.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.12.1...v1.13.0
+[1.12.1]: https://github.com/TimmekHW/vkworkspace/compare/v1.12.0...v1.12.1
+[1.12.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.11.0...v1.12.0
+[1.11.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.10.0...v1.11.0
+[1.10.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.9.0...v1.10.0
+[1.9.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.8.9...v1.9.0
+[1.8.9]: https://github.com/TimmekHW/vkworkspace/compare/v1.8.8...v1.8.9
+[1.8.8]: https://github.com/TimmekHW/vkworkspace/compare/v1.8.7...v1.8.8
+[1.8.7]: https://github.com/TimmekHW/vkworkspace/compare/v1.8.6...v1.8.7
+[1.8.6]: https://github.com/TimmekHW/vkworkspace/compare/v1.8.5...v1.8.6
+[1.8.5]: https://github.com/TimmekHW/vkworkspace/compare/v1.8.4...v1.8.5
+[1.8.4]: https://github.com/TimmekHW/vkworkspace/compare/v1.8.3...v1.8.4
+[1.8.3]: https://github.com/TimmekHW/vkworkspace/compare/v1.8.2...v1.8.3
+[1.8.2]: https://github.com/TimmekHW/vkworkspace/compare/v1.8.1...v1.8.2
+[1.8.1]: https://github.com/TimmekHW/vkworkspace/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.5.0...v1.6.0

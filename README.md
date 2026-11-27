@@ -961,7 +961,9 @@ await bot.answer_callback_query(query_id, "Done!", show_alert=True)
 # Chat management
 await bot.get_chat_info(chat_id)
 await bot.get_chat_admins(chat_id)
-await bot.get_chat_members(chat_id)
+await bot.get_chat_members(chat_id)                # one page: {"members": [...], "cursor": ...}
+async for member in bot.iter_chat_members(chat_id):  # every member, pages are fetched as needed
+    ...
 await bot.get_blocked_users(chat_id)
 await bot.get_pending_users(chat_id)
 await bot.set_chat_title(chat_id, "New Title")

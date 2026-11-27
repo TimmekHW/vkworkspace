@@ -567,3 +567,82 @@ class TestTextTree:
         assert [f["text"] for f in sent] == ["Готово: <b>да</b>", "Готово: *да*", "<i>правка</i>"]
         assert answered.text == replied.text == "Готово: да"
         await bot.close()
+
+
+# ── every member of a chat ──────────────────────────────────────────────
+
+
+class TestIterChatMembers:
+    async def test_pages_are_followed_until_the_cursor_ends(self):
+        pages = {
+            None: {"ok": True, "members": [{"userId": "a@x"}, {"userId": "b@x"}], "cursor": "p2"},
+            "p2": {
+                "ok": True,
+                "members": [{"userId": "c@x", "sn": "c", "nick": "bot_c"}],
+                "cursor": "p3",
+            },
+            "p3": {"ok": True, "members": [{"userId": "d@x", "creator": True}]},
+        }
+        asked: list[str | None] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            fields = _form(request)
+            assert fields["chatId"] == "chat@x"
+            asked.append(fields.get("cursor"))
+            return httpx2.Response(200, json=pages[fields.get("cursor")])
+
+        bot = _bot(handler)
+        members = [m async for m in bot.iter_chat_members("chat@x")]
+        assert [m["userId"] for m in members] == ["a@x", "b@x", "c@x", "d@x"]
+        assert members[2] == {"userId": "c@x", "sn": "c", "nick": "bot_c"}  # nothing is dropped
+        assert asked == [None, "p2", "p3"]
+        await bot.close()
+
+    async def test_next_page_is_requested_only_when_needed(self):
+        asked: list[str | None] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            asked.append(_form(request).get("cursor"))
+            return httpx2.Response(
+                200, json={"ok": True, "members": [{"userId": "a@x"}], "cursor": "more"}
+            )
+
+        bot = _bot(handler)
+        async for member in bot.iter_chat_members("chat@x"):
+            assert member["userId"] == "a@x"
+            break
+        assert asked == [None]
+        await bot.close()
+
+    async def test_chat_without_members_and_a_repeated_cursor(self, caplog):
+        bot = _bot(lambda request: httpx2.Response(200, json={"ok": True}))
+        assert [m async for m in bot.iter_chat_members("chat@x")] == []
+        await bot.close()
+
+        calls = 0
+
+        def stuck(request: httpx2.Request) -> httpx2.Response:
+            nonlocal calls
+            calls += 1
+            return httpx2.Response(
+                200, json={"ok": True, "members": [{"userId": "a@x"}], "cursor": "same"}
+            )
+
+        bot = _bot(stuck)
+        with caplog.at_level(logging.WARNING, logger="vkworkspace.client.bot"):
+            members = [m async for m in bot.iter_chat_members("chat@x")]
+        assert len(members) == 2
+        assert calls == 2  # the server keeps returning one cursor: the loop ends
+        assert "same cursor twice" in caplog.text
+        await bot.close()
+
+    async def test_error_of_a_page_is_raised(self):
+        bot = _bot(
+            lambda request: httpx2.Response(
+                200, json={"ok": False, "description": "Permission denied"}
+            )
+        )
+        with pytest.raises(VKTeamsAPIError, match="Permission denied"):
+            async for _member in bot.iter_chat_members("chat@x"):
+                pass
+        await bot.close()

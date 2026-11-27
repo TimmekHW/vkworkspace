@@ -953,7 +953,9 @@ await bot.answer_callback_query(query_id, "Готово!", show_alert=True)
 # Управление чатом
 await bot.get_chat_info(chat_id)
 await bot.get_chat_admins(chat_id)
-await bot.get_chat_members(chat_id)
+await bot.get_chat_members(chat_id)                # одна страница: {"members": [...], "cursor": ...}
+async for member in bot.iter_chat_members(chat_id):  # все участники, страницы подтягиваются сами
+    ...
 await bot.get_blocked_users(chat_id)
 await bot.get_pending_users(chat_id)
 await bot.set_chat_title(chat_id, "Новое название")
