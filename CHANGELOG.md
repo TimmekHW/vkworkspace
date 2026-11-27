@@ -5,7 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.2.0] - 2026-11-27
+
+A send that may have arrived is told apart from one that failed, with one `except`. Nothing changes for code that catches the existing errors.
 
 ### Added
 
@@ -534,6 +536,7 @@ On stop, handlers that are still running get 10 seconds to finish before they ar
 - Inline keyboard builder utility
 - 10 example bots (echo, keyboard, FSM, middleware, proxy, diagnostic, API tester, etc.)
 
+[2.2.0]: https://github.com/TimmekHW/vkworkspace/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/TimmekHW/vkworkspace/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.13.0...v2.0.0
 [1.13.0]: https://github.com/TimmekHW/vkworkspace/compare/v1.12.1...v1.13.0
