@@ -225,6 +225,8 @@ bot = Bot(token="TOKEN", api_url="URL", retry_on_5xx=None)  # Отключено
 | Запрос не ушёл: ошибка соединения, прокси или пула | для всех |
 | Результат неизвестен: таймаут чтения, «Server disconnected without sending a response», HTTP 504 (шлюз не дождался сервера), `"Request timed out"` | для всех, кроме `sendText`, `sendTextWithDeeplink`, `sendFile`, `sendVoice`, `createChat`, `threads/add` — повтор может создать дубль |
 
+Создающий метод с неизвестным результатом поднимает `VKTeamsOutcomeUnknown` (см. [Ошибки](#ошибки)). `answerCallbackQuery` вызывается один раз, без повторов: `queryId` одноразовый, а подтверждение нажатия через несколько секунд уже не нужно.
+
 Повторы укладываются в предел времени вызова (см. ниже): когда времени на новую попытку не осталось, вызов завершается ошибкой.
 
 ### Сетевые сбои
@@ -242,10 +244,14 @@ bot = Bot(token="TOKEN", api_url="URL", retry_on_5xx=None)  # Отключено
 Любой сбой вызова — сеть, HTTP, ответ сервера — метод `Bot` поднимает как `VKWorkspaceError`:
 
 ```python
-from vkworkspace.exceptions import VKTeamsAPIError, VKTeamsHTTPError, VKTeamsNetworkError
+from vkworkspace.exceptions import (
+    VKTeamsAPIError, VKTeamsHTTPError, VKTeamsNetworkError, VKTeamsOutcomeUnknown,
+)
 
 try:
     await bot.send_text(chat_id, "Привет")
+except VKTeamsOutcomeUnknown:      # запрос мог дойти, ответа нет — сообщение могло прийти
+    ...                            # не повторяйте вслепую: сначала проверьте чат
 except VKTeamsAPIError as e:       # сервер ответил ok=false
     print(e.method, e.message)     # "messages/sendText", "Permission denied"
 except VKTeamsNetworkError as e:   # ответа нет: соединение, прокси, TLS, таймаут
@@ -253,6 +259,8 @@ except VKTeamsNetworkError as e:   # ответа нет: соединение, 
 except VKTeamsHTTPError as e:      # HTTP 4xx / 5xx от шлюза
     print(e.status_code)
 ```
+
+`VKTeamsOutcomeUnknown` поднимают методы, которые создают что-то новое (`send_text`, `send_text_with_deeplink`, `send_file`, `send_voice`, `create_chat`, `threads_add`), после таймаута чтения, обрыва, HTTP 504, `"Request timed out"` или предела времени вызова. Библиотека такой вызов не повторяет, чтобы не создать дубль. Это исключение одновременно и прежний класс — `VKTeamsNetworkError`, `VKTeamsHTTPError` (504) или `VKTeamsAPIError`, — так что `except` из примера выше работают и без него; поля те же: `method`, `message`, `original`.
 
 HTTP-клиент — деталь реализации: ловите типы библиотеки, а не `httpx2.*`. Исходное исключение `httpx2` лежит в `.original`. Страница прокси вместо ответа Bot API (HTTP 200 с HTML) — тоже `VKTeamsNetworkError`. Скачивание — `download_file`, `InputFile.from_url` — поднимает `FileDownloadError`.
 

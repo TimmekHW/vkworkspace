@@ -1191,6 +1191,7 @@ from vkworkspace.exceptions import (
     VKTeamsAPIError,       # the server answered ok=false: e.method, e.message
     VKTeamsNetworkError,   # no answer (connection, proxy, TLS, timeout): e.message, e.original
     VKTeamsHTTPError,      # HTTP 4xx/5xx from a gateway: e.status_code
+    VKTeamsOutcomeUnknown, # a send that may have arrived; also one of the three above
     SSLVerificationError,  # the server certificate is not trusted; the text says what to do
     FileDownloadError,     # download_file / InputFile.from_url failed
     VKWorkspaceError,      # base class of all of the above
@@ -1201,8 +1202,10 @@ try:
 except VKTeamsAPIError as e:
     if e.message == "Permission denied":
         ...
+except VKTeamsOutcomeUnknown:
+    ...  # the message may or may not have been delivered: check before resending
 except VKTeamsNetworkError:
-    ...  # the message may or may not have been delivered
+    ...  # not sent (connection, proxy, TLS)
 ```
 
 ### What the Bot Does on Its Own (no code needed)
@@ -1212,7 +1215,8 @@ except VKTeamsNetworkError:
   outcome (read timeout, dropped connection, HTTP 504, `"Request timed out"`) is repeated for
   every method EXCEPT
   `send_text`, `send_text_with_deeplink`, `send_file`, `send_voice`, `create_chat`,
-  `threads_add` — repeating those could create a duplicate, so they raise `VKTeamsNetworkError`.
+  `threads_add` — repeating those could create a duplicate, so they raise `VKTeamsOutcomeUnknown`.
+  `answer_callback_query` is called once, without retries.
 - **«Format error»** (`format_fallback=True`): a message the server rejects for broken markup is
   resent with repaired HTML, then as plain text. Do not write your own try/except for it.
   Pass formatted text as a `Text` tree (`from_markdown(...)`, `Text(...)`), not as a rendered

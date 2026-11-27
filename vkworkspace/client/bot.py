@@ -31,6 +31,7 @@ from vkworkspace.exceptions import (
     VKTeamsAPIError,
     VKTeamsHTTPError,
     VKTeamsNetworkError,
+    VKTeamsOutcomeUnknown,
 )
 from vkworkspace.types.chat import ChatInfo
 from vkworkspace.types.event import Update
@@ -80,6 +81,36 @@ _NON_REPEATABLE = frozenset(
         "threads/add",
     }
 )
+# Methods called once, without retries. A button press is acknowledged once:
+# its queryId is single-use, and the answer is useless after a few seconds.
+_SINGLE_ATTEMPT = frozenset({"messages/answerCallbackQuery"})
+
+
+def _outcome_unknown(exc: BaseException) -> bool:
+    """True if the failed attempt may have been carried out by the server."""
+    if isinstance(exc, _OUTCOME_UNKNOWN_ERRORS):
+        return True
+    if isinstance(exc, httpx2.HTTPStatusError):
+        return exc.response.status_code == 504
+    return isinstance(exc, VKTeamsAPIError) and exc.message.startswith("Request timed out")
+
+
+def _not_repeated(endpoint: str, exc: Exception) -> VKTeamsOutcomeUnknown | None:
+    """The error of a call not repeated because its outcome is unknown, else ``None``."""
+    if endpoint not in _NON_REPEATABLE or not _outcome_unknown(exc):
+        return None
+    if isinstance(exc, VKTeamsAPIError):
+        return VKTeamsOutcomeUnknown._of(exc)
+    if isinstance(exc, httpx2.HTTPError):
+        return VKTeamsOutcomeUnknown._of(_library_error(endpoint, exc))
+    return None
+
+
+def _library_error(endpoint: str, exc: httpx2.HTTPError) -> VKTeamsHTTPError | VKTeamsNetworkError:
+    """The library error for an HTTP client error."""
+    if isinstance(exc, httpx2.HTTPStatusError):
+        return VKTeamsHTTPError(endpoint, exc.response.status_code, exc)
+    return VKTeamsNetworkError(endpoint, _describe(exc), exc)
 
 
 class _ClientState:
@@ -538,10 +569,8 @@ class Bot:
         """The call itself: retries, format fallback, library exception types."""
         try:
             return await self._send_repairing_format(endpoint, params, files)
-        except httpx2.HTTPStatusError as exc:
-            raise VKTeamsHTTPError(endpoint, exc.response.status_code, exc) from exc
         except httpx2.HTTPError as exc:
-            raise VKTeamsNetworkError(endpoint, _describe(exc), exc) from exc
+            raise _library_error(endpoint, exc) from exc
 
     async def _send_repairing_format(
         self,
@@ -589,7 +618,7 @@ class Bot:
         url = f"{self.api_url}/{endpoint}"
 
         max_attempts = (self.retry_on_5xx or 0) + 1
-        if files and not _files_repeatable(files):
+        if endpoint in _SINGLE_ATTEMPT or (files and not _files_repeatable(files)):
             max_attempts = 1
 
         t0 = time.monotonic()
@@ -605,9 +634,12 @@ class Bot:
                 data = await self._call(endpoint, url, params, files, give_up_at)
             except Exception as exc:
                 if not self._is_retryable(endpoint, exc):
+                    unknown = _not_repeated(endpoint, exc)
+                    if unknown is not None:
+                        raise unknown from unknown.original
                     raise
                 if attempt >= max_attempts - 1:
-                    if isinstance(exc, VKTeamsAPIError):
+                    if isinstance(exc, VKTeamsAPIError) and max_attempts > 1:
                         logger.error(
                             "Server error from %s persisted after %d attempts: %s (params: %s)",
                             endpoint,
@@ -724,7 +756,10 @@ class Bot:
         * the outcome is unknown (read timeout, dropped connection, HTTP 504 —
           the gateway stopped waiting for the server, ``"Request timed out"``)
           — unless the method creates something new on every call
-          (see ``_NON_REPEATABLE``).
+          (see ``_NON_REPEATABLE``); such a call raises
+          :class:`~vkworkspace.exceptions.VKTeamsOutcomeUnknown`.
+
+        Methods in ``_SINGLE_ATTEMPT`` are never repeated.
         """
         if isinstance(exc, _NOT_SENT_ERRORS):
             return True
@@ -1189,6 +1224,11 @@ class Bot:
         url: str | None = None,
     ) -> APIResponse:
         """Answer a callback query (inline button press).
+
+        Called once, without retries: the ``queryId`` is single-use, and some
+        servers answer «Server error» to every call of this method. A failure
+        raises as usual — catch it if the button's action does not depend on
+        the answer.
 
         Must be called within ~30s of receiving the callback, otherwise
         the user sees a loading spinner.

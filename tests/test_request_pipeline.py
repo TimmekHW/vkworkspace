@@ -71,7 +71,7 @@ class TestExceptions:
         assert err.method == "messages/sendText"
         assert err.message == "ReadTimeout"
         assert isinstance(err.original, httpx2.ReadTimeout)
-        assert str(err) == "Network error in messages/sendText: ReadTimeout"
+        assert str(err).startswith("Network error in messages/sendText: ReadTimeout")
         assert err.__cause__ is err.original
         await bot.close()
 

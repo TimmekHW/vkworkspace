@@ -225,6 +225,8 @@ bot = Bot(token="TOKEN", api_url="URL", retry_on_5xx=None) # Disabled
 | The request was not sent: connection, proxy or pool error | every method |
 | The outcome is unknown: read timeout, «Server disconnected without sending a response», HTTP 504 (the gateway stopped waiting for the server), `"Request timed out"` | every method except `sendText`, `sendTextWithDeeplink`, `sendFile`, `sendVoice`, `createChat`, `threads/add` — a repeat could create a duplicate |
 
+A creating method with an unknown outcome raises `VKTeamsOutcomeUnknown` (see [Errors](#errors)). `answerCallbackQuery` is called once, without retries: its `queryId` is single-use, and acknowledging a press a few seconds later is pointless.
+
 Retries stay within the deadline of the call (below): when there is no time left for another attempt, the call fails.
 
 ### Network failures
@@ -242,10 +244,14 @@ The bot recovers from a network outage on its own, without a restart and without
 Any failure of a call — network, HTTP, the server's answer — is raised by a `Bot` method as a `VKWorkspaceError`:
 
 ```python
-from vkworkspace.exceptions import VKTeamsAPIError, VKTeamsHTTPError, VKTeamsNetworkError
+from vkworkspace.exceptions import (
+    VKTeamsAPIError, VKTeamsHTTPError, VKTeamsNetworkError, VKTeamsOutcomeUnknown,
+)
 
 try:
     await bot.send_text(chat_id, "Hello")
+except VKTeamsOutcomeUnknown:      # the request may have arrived, no answer came
+    ...                            # do not resend blindly: check the chat first
 except VKTeamsAPIError as e:       # the server answered ok=false
     print(e.method, e.message)     # "messages/sendText", "Permission denied"
 except VKTeamsNetworkError as e:   # no answer: connection, proxy, TLS, timeout
@@ -253,6 +259,8 @@ except VKTeamsNetworkError as e:   # no answer: connection, proxy, TLS, timeout
 except VKTeamsHTTPError as e:      # HTTP 4xx / 5xx from a gateway
     print(e.status_code)
 ```
+
+`VKTeamsOutcomeUnknown` is raised by the methods that create something new (`send_text`, `send_text_with_deeplink`, `send_file`, `send_voice`, `create_chat`, `threads_add`) after a read timeout, a dropped connection, HTTP 504, `"Request timed out"` or the deadline of the call. The library does not repeat such a call, so as not to create a duplicate. The exception is also the class it came from — `VKTeamsNetworkError`, `VKTeamsHTTPError` (504) or `VKTeamsAPIError` — so the `except` clauses above work without it; the fields are the same: `method`, `message`, `original`.
 
 The HTTP client is an implementation detail: catch the library's types, not `httpx2.*`. The original `httpx2` exception is kept on `.original`. A proxy's page instead of a Bot API answer (HTTP 200 with HTML) is a `VKTeamsNetworkError` too. Downloads — `download_file`, `InputFile.from_url` — raise `FileDownloadError`.
 

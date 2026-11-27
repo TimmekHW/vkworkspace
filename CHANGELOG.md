@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **`VKTeamsOutcomeUnknown`** — one class to catch when a send may have arrived and no answer came. Raised by `send_text`, `send_text_with_deeplink`, `send_file`, `send_voice`, `create_chat` and `threads_add` after a read timeout, a dropped connection, HTTP 504, `"Request timed out"` or the deadline of the call — the cases the library does not repeat so as not to create a duplicate. The exception is also the class raised before (`VKTeamsNetworkError`, `VKTeamsHTTPError` or `VKTeamsAPIError`), so existing `except` clauses keep working.
+
+  ```python
+  try:
+      await bot.send_text(chat_id, text)
+  except VKTeamsOutcomeUnknown:
+      ...  # the message may have been delivered: check before resending
+  ```
+
+### Changed
+
+- `answer_callback_query` makes one attempt, without retries on «Server error» or network errors, and without an `ERROR` in the log about a persisting server error. The `queryId` is single-use, and some servers answer «Server error» to every call of this method: retries only added four requests per button press.
+
 ## [2.1.0] - 2026-11-27
 
 Formatted text goes to the bot as a tree, and a rejected one comes back to the chat as clean plain text. Nothing changes for code that sends strings.

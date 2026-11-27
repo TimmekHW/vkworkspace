@@ -23,6 +23,7 @@ from vkworkspace.exceptions import (
     VKTeamsAPIError,
     VKTeamsHTTPError,
     VKTeamsNetworkError,
+    VKTeamsOutcomeUnknown,
 )
 from vkworkspace.types.event import Update
 
@@ -646,3 +647,173 @@ class TestPollingLoop:
         assert seen == [2, 3]
         assert "Update 1 was not processed" in caplog.text
         assert bot.calls == 2
+
+
+# ── a call that was not repeated because its outcome is unknown ─────────
+
+TIMED_OUT = {"ok": False, "description": "Request timed out"}
+DROPPED = "Server disconnected without sending a response."
+
+
+class TestOutcomeUnknown:
+    @pytest.mark.parametrize(
+        ("step", "also"),
+        [
+            (httpx2.ReadTimeout(""), VKTeamsNetworkError),
+            (httpx2.RemoteProtocolError(DROPPED), VKTeamsNetworkError),
+            (504, VKTeamsHTTPError),
+            (TIMED_OUT, VKTeamsAPIError),
+        ],
+        ids=["read-timeout", "dropped", "http-504", "request-timed-out"],
+    )
+    async def test_send_raises_one_class_that_is_also_the_old_one(self, step, also):
+        bot = Bot(token=TOKEN, api_url=API_URL)
+        handler, calls = _script(step, OK)
+        _own_clients(bot, handler)
+        with pytest.raises(VKTeamsOutcomeUnknown) as info:
+            await bot.send_text("c@x", "hi")
+        err = info.value
+        assert isinstance(err, also)  # `except VKTeamsNetworkError` etc. keep working
+        assert calls == ["messages/sendText"]  # not repeated
+        assert err.method == "messages/sendText"
+        assert "outcome is unknown" in str(err)
+        await bot.close()
+
+    async def test_fields_and_cause(self):
+        bot = Bot(token=TOKEN, api_url=API_URL)
+        handler, _calls = _script(httpx2.ReadTimeout(""))
+        _own_clients(bot, handler)
+        with pytest.raises(VKTeamsOutcomeUnknown) as info:
+            await bot.send_file("c@x", file_id="f1")
+        err = info.value
+        assert err.message == "ReadTimeout"
+        assert isinstance(err.original, httpx2.ReadTimeout)
+        assert err.__cause__ is err.original
+        await bot.close()
+
+        bot = Bot(token=TOKEN, api_url=API_URL)
+        handler, _calls = _script(504)
+        _own_clients(bot, handler)
+        with pytest.raises(VKTeamsOutcomeUnknown) as info:
+            await bot.send_voice("c@x", file_id="v1")
+        assert isinstance(info.value, VKTeamsHTTPError)
+        assert info.value.status_code == 504
+        assert info.value.message == "HTTP 504"
+        assert isinstance(info.value.original, httpx2.HTTPStatusError)
+        await bot.close()
+
+        bot = Bot(token=TOKEN, api_url=API_URL)
+        handler, _calls = _script(TIMED_OUT)
+        _own_clients(bot, handler)
+        with pytest.raises(VKTeamsOutcomeUnknown) as info:
+            await bot.send_text("c@x", "hi")
+        assert info.value.message == "Request timed out"
+        assert info.value.original is None
+        assert info.value.__cause__ is None
+        await bot.close()
+
+    async def test_deadline_of_a_send_is_an_unknown_outcome(self):
+        async def handler(request: httpx2.Request) -> httpx2.Response:
+            await asyncio.Event().wait()  # never answers
+            raise AssertionError("unreachable")
+
+        bot = Bot(token=TOKEN, api_url=API_URL, timeout=0.05)
+        bot.DEADLINE_MARGIN = 0.05
+        _own_clients(bot, handler)
+        with pytest.raises(VKTeamsOutcomeUnknown, match="got no response"):
+            await asyncio.wait_for(bot.send_text("c@x", "hi"), timeout=5)
+        await bot.close()
+
+    async def test_request_that_was_not_sent_is_retried_then_is_a_plain_error(self):
+        bot = Bot(token=TOKEN, api_url=API_URL, retry_on_5xx=2)
+        handler, calls = _script(httpx2.ConnectError(""))
+        _own_clients(bot, handler)
+        with pytest.raises(VKTeamsNetworkError) as info:
+            await bot.send_text("c@x", "hi")
+        assert not isinstance(info.value, VKTeamsOutcomeUnknown)
+        assert len(calls) == 3
+        await bot.close()
+
+    async def test_not_sent_then_unknown_is_an_unknown_outcome(self):
+        bot = Bot(token=TOKEN, api_url=API_URL)
+        handler, calls = _script(httpx2.ConnectError(""), httpx2.ReadTimeout(""), OK)
+        _own_clients(bot, handler)
+        with pytest.raises(VKTeamsOutcomeUnknown):
+            await bot.send_text("c@x", "hi")
+        assert len(calls) == 2
+        await bot.close()
+
+    async def test_repeatable_method_keeps_the_old_errors(self):
+        bot = Bot(token=TOKEN, api_url=API_URL, retry_on_5xx=1)
+        handler, calls = _script(httpx2.ReadTimeout(""))
+        _own_clients(bot, handler)
+        with pytest.raises(VKTeamsNetworkError) as info:
+            await bot.set_chat_title("c@x", "t")
+        assert not isinstance(info.value, VKTeamsOutcomeUnknown)
+        assert len(calls) == 2  # repeated: a repeat cannot create a duplicate
+        await bot.close()
+
+    async def test_definite_answers_are_not_an_unknown_outcome(self):
+        cases: list[tuple[Any, type[Exception]]] = [
+            ({"ok": False, "description": "Permission denied"}, VKTeamsAPIError),
+            (403, VKTeamsHTTPError),
+        ]
+        for step, error in cases:
+            bot = Bot(token=TOKEN, api_url=API_URL)
+            handler, _calls = _script(step)
+            _own_clients(bot, handler)
+            with pytest.raises(error) as info:
+                await bot.send_text("c@x", "hi")
+            assert not isinstance(info.value, VKTeamsOutcomeUnknown)
+            await bot.close()
+
+    async def test_middleware_sees_the_unknown_outcome(self):
+        bot = Bot(token=TOKEN, api_url=API_URL)
+        handler, _calls = _script(httpx2.ReadTimeout(""))
+        _own_clients(bot, handler)
+        seen: list[BaseException] = []
+
+        @bot.request_middleware
+        async def spy(make_request: Any, endpoint: str, params: Any, files: Any) -> Any:
+            try:
+                return await make_request(endpoint, params, files)
+            except Exception as exc:
+                seen.append(exc)
+                raise
+
+        with pytest.raises(VKTeamsOutcomeUnknown):
+            await bot.send_text("c@x", "hi")
+        assert len(seen) == 1
+        assert isinstance(seen[0], VKTeamsOutcomeUnknown)
+        await bot.close()
+
+
+class TestAnswerCallbackQuery:
+    @pytest.mark.parametrize(
+        "step",
+        [{"ok": False, "description": "Server error: id=0x1"}, httpx2.ConnectError(""), 502],
+        ids=["server-error", "not-sent", "http-502"],
+    )
+    async def test_one_attempt_without_retries(self, step, caplog, backoff_delays):
+        bot = Bot(token=TOKEN, api_url=API_URL)
+        handler, calls = _script(step, {"ok": True})
+        _own_clients(bot, handler)
+        with (
+            caplog.at_level(logging.WARNING, logger="vkworkspace.client.bot"),
+            pytest.raises((VKTeamsAPIError, VKTeamsNetworkError, VKTeamsHTTPError)),
+        ):
+            await bot.answer_callback_query("q1", "Готово")
+        assert calls == ["messages/answerCallbackQuery"]
+        assert backoff_delays == []
+        assert "persisted" not in caplog.text
+        assert "retrying" not in caplog.text
+        await bot.close()
+
+    async def test_answer_still_works(self):
+        bot = Bot(token=TOKEN, api_url=API_URL)
+        handler, calls = _script({"ok": True})
+        _own_clients(bot, handler)
+        resp = await bot.answer_callback_query("q1", "Готово")
+        assert resp.ok
+        assert calls == ["messages/answerCallbackQuery"]
+        await bot.close()
